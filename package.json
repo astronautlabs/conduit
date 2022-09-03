@@ -1,0 +1,34 @@
+{
+  "name": "@astronautlabs/webrpc",
+  "version": "0.0.1",
+  "description": "",
+  "main": "dist/index.js",
+  "module": "dist.esm/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
+  "private": true,
+  "scripts": {
+    "build:cjs": "tsc -b",
+    "build:esm": "tsc -b tsconfig.esm.json",
+    "build": "npm run build:cjs && npm run build:esm",
+    "test": "npm run build:cjs && node --enable-source-maps dist/test",
+    "prepublishOnly": "npm run build"
+  },
+  "author": "Astronaut Labs, LLC",
+  "license": "MIT",
+  "dependencies": {
+    "rxjs": "^6.6.7",
+    "uuid": "^3.4.0"
+  },
+  "peerDependencies": {
+    "reflect-metadata": "^0.1.13"
+  },
+  "devDependencies": {
+    "@types/uuid": "^3.4.10",
+    "chai": "^4.3.6",
+    "razmin": "^1.2.0",
+    "typescript": "^4.6.3"
+  },
+  "gitHead": "d2cd94ce4f7c16445408ceadbef9a4cb7385a94f"
+}
