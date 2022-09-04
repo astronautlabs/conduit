@@ -47,7 +47,13 @@ export class RPCSession {
     private _remote: Proxied<RPCSession>;
     get remote() { return this._remote; }
 
-    async getRemoteService<T = any>(serviceIdentity: string): Promise<Proxied<T>> {
+    async getRemoteService<T>(serviceIdentity: Constructor<T>): Promise<Proxied<T>>
+    async getRemoteService<T = any>(serviceIdentity: string): Promise<Proxied<T>>
+    async getRemoteService(serviceIdentityOrClass: string | Function): Promise<Proxied<T>> {
+        if (typeof serviceIdentityOrClass === 'function')
+            return this.getRemoteService(getRpcServiceName(serviceIdentityOrClass));
+        
+        let serviceIdentity: string = serviceIdentityOrClass;
         this.log(`Finding remote service named '${serviceIdentity}...'`);
         return this.remote.getLocalService(serviceIdentity);
     }
