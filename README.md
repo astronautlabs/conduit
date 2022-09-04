@@ -121,11 +121,21 @@ setTimeout(async () => await subscription.unsubscribe(), 5*1000);
 
 # Channels
 
-You can use any kind of communication channel underneath an RPCSession. Several useful types are included:
+You can use any kind of communication channel underneath an RPCSession. Some channel types are included:
 
 * `SocketChannel` - Perform RPC over a WebSocket
 * `WindowChannel` - Perform RPC between the current window and a remote window, such as an `<iframe>` or a popup
 * `LocalChannel` - A simple two-sided in-memory channel that is good for testing.
+
+Since RPC over WebSockets is so common, it is made especially convenient:
+
+```typescript
+let session = await RPCSession.connect(`wss://example.com/my/socket`);
+```
+
+When the promise returned by `connect()` resolves the connection is fully established and ready for communication. If a connection error occurs, the promise will reject.
+
+---
 
 You can implement your own custom channels by implementing the `RPCChannel` interface
 
