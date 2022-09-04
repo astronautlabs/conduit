@@ -1,10 +1,17 @@
+export const OBJECT_ID = Symbol('OBJECT_ID');
+export const REFERENCE_ID = Symbol('REFERENCE_ID');
+
+export interface Constructor<T = any> {
+    new (...args: any[]): T;
+}
+
 /**
  * Get the RPC type assigned to the given target (or property of target).
  * @param target 
  * @param propertyKey 
  * @returns 
  */
-export function getRpcType(target: any, propertyKey?: string) {
+ export function getRpcType(target: any, propertyKey?: string) {
     if (!target)
         throw new Error(`Cannot get RPC type for undefined/null target`);
         

@@ -1,11 +1,13 @@
 import { delay, describe } from "razmin";
-import { LocalChannel, Proxied, RPCChannel, RPCSession } from ".";
 import { Method } from "./method";
 import { Remotable } from "./remotable";
 import { Service } from "./service";
 import { expect } from "chai";
 import { Event } from "./event";
 import { Subject } from "rxjs";
+import { RPCSession } from "./session";
+import { Proxied } from "./proxied";
+import { RPCChannel } from "./channel";
 
 export class TestChannel implements RPCChannel {
     private _received = new Subject<string>();

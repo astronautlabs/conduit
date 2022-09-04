@@ -7,7 +7,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "private": true,
   "scripts": {
     "build:cjs": "tsc -b",
     "build:esm": "tsc -b tsconfig.esm.json",
