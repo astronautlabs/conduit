@@ -10,11 +10,20 @@ export function getRpcType(target: any, propertyKey?: string) {
         
     if (propertyKey) {
         if (target.constructor.prototype !== target) {
+            if (!target.constructor.prototype) {
+                throw new Error(`BUG: Should not hit this`);
+            }
             // This is an instance
             target = target.constructor.prototype;
         }
     }
-    return Reflect.getMetadata('rpc:type', target, propertyKey) || 'none';
+
+    try {
+        return Reflect.getMetadata('rpc:type', target, propertyKey) || 'none';
+    } catch (e) {
+        debugger;
+        throw e;
+    }
 }
 
 export function getRpcServiceName(target: any) {

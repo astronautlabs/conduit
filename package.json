@@ -12,7 +12,7 @@
     "build:cjs": "tsc -b",
     "build:esm": "tsc -b tsconfig.esm.json",
     "build": "npm run build:cjs && npm run build:esm",
-    "test": "npm run build:cjs && node --enable-source-maps dist/test",
+    "test": "npm run build:cjs && node --expose-gc --enable-source-maps dist/test",
     "prepublishOnly": "npm run build"
   },
   "author": "Astronaut Labs, LLC",
@@ -25,6 +25,7 @@
     "reflect-metadata": "^0.1.13"
   },
   "devDependencies": {
+    "@types/chai": "^4.3.3",
     "@types/uuid": "^3.4.10",
     "chai": "^4.3.6",
     "razmin": "^1.2.0",
