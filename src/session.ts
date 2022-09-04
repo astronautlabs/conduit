@@ -49,7 +49,7 @@ export class RPCSession {
 
     async getRemoteService<T>(serviceIdentity: Constructor<T>): Promise<Proxied<T>>
     async getRemoteService<T = any>(serviceIdentity: string): Promise<Proxied<T>>
-    async getRemoteService(serviceIdentityOrClass: string | Function): Promise<Proxied<T>> {
+    async getRemoteService(serviceIdentityOrClass: string | Function): Promise<Proxied<any>> {
         if (typeof serviceIdentityOrClass === 'function')
             return this.getRemoteService(getRpcServiceName(serviceIdentityOrClass));
         
