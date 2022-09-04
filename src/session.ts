@@ -2,7 +2,8 @@
 
 import { Observable } from 'rxjs';
 import { v4 as uuid } from 'uuid';
-import { RPCChannel } from './channel';
+import { RPCChannel, SocketChannel } from './channel';
+import { DurableSocket } from './durable-socket';
 import { inlineRemotable } from './inline-remotable';
 import { Constructor, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
 import { Message } from './message';
@@ -42,6 +43,15 @@ export class RPCSession {
         this.registerService(RPCSession, () => this);
         this.registerLocalObject(this, getRpcServiceName(RPCSession));
         channel.received.subscribe(data => this.onReceiveMessage(this.decodeMessage(data)));
+    }
+
+    /**
+     * Connect via WebSocket to the given URL and create a new RPCSession using 
+     * the socket as the underlying channel.
+     * @param url 
+     */
+    static async connect(url: string): Promise<RPCSession> {
+        return new RPCSession((await new DurableSocket(url).waitUntilReady()).asChannel());
     }
 
     private _remote: Proxied<RPCSession>;

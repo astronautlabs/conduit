@@ -1,3 +1,5 @@
+import { SocketChannel } from "./channel";
+
 /**
  * Provides a durable WebSocket. Such a socket will automatically handle reconnection including
  * exponential backoff and jitter. It will also enqueue messages while the socket is down and 
@@ -18,6 +20,23 @@
     ) {
         this._sessionId = sessionId;
         this.connect();
+    }
+
+    async waitUntilReady() {
+        await new Promise<void>((resolve, reject) => {
+            this.addEventListener('open', () => resolve());
+            this.addEventListener('close', e => {
+                if (e.code === 503) {
+                    console.error(`Failed to connect to chat service!`);
+                    reject(e);
+                }
+            });
+        });
+        return this;
+    }
+
+    asChannel() {
+        return new SocketChannel(this);
     }
 
     private connect() {
