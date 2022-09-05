@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { RPCChannel, SocketChannel } from './channel';
 import { DurableSocket } from './durable-socket';
 import { inlineRemotable } from './inline-remotable';
-import { Constructor, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
+import { AnyConstructor, Constructor, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
 import { Message } from './message';
 import { Method } from './method';
 import { Proxied, RemoteSubscription } from './proxied';
@@ -57,7 +57,7 @@ export class RPCSession {
     private _remote: Proxied<RPCSession>;
     get remote() { return this._remote; }
 
-    async getRemoteService<T>(serviceIdentity: Constructor<T>): Promise<Proxied<T>>
+    async getRemoteService<T>(serviceIdentity: AnyConstructor<T>): Promise<Proxied<T>>
     async getRemoteService<T = any>(serviceIdentity: string): Promise<Proxied<T>>
     async getRemoteService(serviceIdentityOrClass: string | Function): Promise<Proxied<any>> {
         if (typeof serviceIdentityOrClass === 'function')

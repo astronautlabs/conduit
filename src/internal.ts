@@ -1,9 +1,9 @@
 export const OBJECT_ID = Symbol('OBJECT_ID');
 export const REFERENCE_ID = Symbol('REFERENCE_ID');
 
-export interface Constructor<T = any> {
-    new (...args: any[]): T;
-}
+export type Constructor<T = any> = (new (...args: any[]) => T);
+export type AbstractConstructor<T = any> = (abstract new (...args: any[]) => T);
+export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
 
 /**
  * Get the RPC type assigned to the given target (or property of target).

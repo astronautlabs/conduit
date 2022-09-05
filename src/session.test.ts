@@ -56,6 +56,28 @@ describe('RPCSession', it => {
         return [sessionA, sessionB];
     }
 
+    it('can accept abstract classes', async () => {
+        let [sessionA, sessionB] = sessionPair();
+
+        @Service('com.example.A')
+        abstract class A {
+            abstract info(): Promise<string>;
+        }
+
+        class AImpl extends A {
+            @Method()
+            async info() {
+                return 'this is A';
+            }
+        }
+
+        sessionA.registerService(AImpl);
+
+        let aProxy = await sessionB.getRemoteService(A);
+        let str = await aProxy.info();
+        expect(str).to.equal('this is A');
+    });
+
     it('performs simple method calls', async () => {
         let [sessionA, sessionB] = sessionPair();
         let received = '';
