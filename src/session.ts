@@ -123,6 +123,10 @@ export class RPCSession {
         });
     }
 
+    protected async performCall(request: Request): Promise<any> {
+        return request.receiver[request.method](...request.parameters);
+    }
+
     private async onReceiveMessage(message: Message) {
         if (isRequest(message)) {
             if (!message.receiver) {
@@ -138,12 +142,13 @@ export class RPCSession {
 
                 return;
             }
+
             if (getRpcType(message.receiver, message.method) === 'call' && typeof message.receiver[message.method] === 'function') {
                 let value;
                 let error;
                 
                 try {
-                    value = await message.receiver[message.method](...message.parameters);
+                    value = await this.performCall(message);
                 } catch (e) {
                     if (e instanceof Error) {
                         error = { message: e.message, stack: e.stack };
