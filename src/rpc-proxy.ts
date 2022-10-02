@@ -10,6 +10,8 @@ export class RPCProxy {
     }
 
     [OBJECT_ID]?: string;
+    [REFERENCE_ID]?: string;
+
 
     static create<T = any>(session: RPCSession, objectId: string, referenceId: string): Proxied<T> {
         const methodMap = new Map<string, Function>();
