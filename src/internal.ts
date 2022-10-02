@@ -11,7 +11,7 @@ export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
  * @param propertyKey 
  * @returns 
  */
- export function getRpcType(target: any, propertyKey?: string): 'service' | 'remotable' | undefined {
+ export function getRpcType(target: any, propertyKey?: string): 'service' | 'remotable' | 'event' | undefined {
     if (!target)
         throw new Error(`Cannot get RPC type for undefined/null target`);
         
