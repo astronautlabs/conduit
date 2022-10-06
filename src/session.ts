@@ -9,11 +9,12 @@ import { AnyConstructor, Constructor, getRpcServiceName, getRpcType, OBJECT_ID, 
 import { Message } from './message';
 import { Method } from './method';
 import { Proxied, RemoteSubscription } from './proxied';
+import { Remotable } from './remotable';
 import { isRemoteRef, RemoteRef } from './remote-ref';
 import { isRequest, Request } from './request';
 import { isResponse, Response } from './response';
 import { RPCProxy } from './rpc-proxy';
-import { Service } from './service';
+import { Name } from './name';
 
 function isRemotable(obj: any): boolean {
     return obj && typeof obj === 'object' 
@@ -36,13 +37,19 @@ interface InFlightRequest {
 
 export type ServiceFactory<T = any> = (session: RPCSession) => T;
 
-@Service(`org.webrpc.session`)
+@Name(`org.webrpc.session`)
+@Remotable()
 export class RPCSession {
     constructor(readonly channel: RPCChannel) {
         this._remote = RPCProxy.create<RPCSession>(this, getRpcServiceName(RPCSession), '');
         this.registerService(RPCSession, () => this);
         this.registerLocalObject(this, getRpcServiceName(RPCSession));
         channel.received.subscribe(data => this.onReceiveMessage(this.decodeMessage(data)));
+        channel.stateLost?.subscribe(() => {
+            Array.from(this._requestMap.values()).forEach(req => {
+                req.error = new Error(`The channel state was lost.`)
+            });
+        });
     }
 
     /**
@@ -362,14 +369,16 @@ export class RPCSession {
         factory ??= () => new klass();
 
         if (getRpcType(klass) !== 'remotable')
-            throw new Error(`Class '${klass.name}' must be marked with @Service() to be registered as a service`);
+            throw new Error(`Class '${klass.name}' must extend Service or be marked with @Remotable() to be registered as a service`);
         
         let serviceName = getRpcServiceName(klass);
-
-        this.log(`Registering service with ID ${serviceName}...`);
+        if (!serviceName)
+            throw new Error(`Class '${klass.name}' must be marked with @Name()`);
 
         if (typeof serviceName !== 'string')
             throw new Error(`Service name must be a string`);
+
+        this.log(`Registering service with ID ${serviceName}...`);
         
         if (this.serviceRegistry.has(serviceName)) {
             throw new Error(

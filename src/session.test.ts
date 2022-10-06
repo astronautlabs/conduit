@@ -1,6 +1,7 @@
 import { delay, describe } from "razmin";
 import { Method } from "./method";
 import { Remotable } from "./remotable";
+import { Name } from "./name";
 import { Service } from "./service";
 import { expect } from "chai";
 import { Event } from "./event";
@@ -59,8 +60,8 @@ describe('RPCSession', it => {
     it('can accept abstract classes', async () => {
         let [sessionA, sessionB] = sessionPair();
 
-        @Service('com.example.A')
-        abstract class A {
+        @Name('com.example.A')
+        abstract class A extends Service {
             abstract info(): Promise<string>;
         }
 
@@ -90,8 +91,8 @@ describe('RPCSession', it => {
             }
         }
 
-        @Service('org.webrpc.A')
-        class A {
+        @Name('org.webrpc.A')
+        class A extends Service {
             @Method()
             async doStuff(callback: Proxied<CallbackB>) {
                 await callback.callback("one|");
@@ -130,10 +131,8 @@ describe('RPCSession', it => {
             }
         }
 
-        @Service('org.webrpc.A')
-        class A {
-            constructor() {
-            }
+        @Name('org.webrpc.A')
+        class A extends Service {
             private _somethingHappened = new Subject<string>();
             @Event() get somethingHappened() { return this._somethingHappened.asObservable(); }
 
@@ -164,8 +163,8 @@ describe('RPCSession', it => {
             @Method() works() { return 'good!'; }
         }
 
-        @Service('org.webrpc.A')
-        class A {
+        @Name('org.webrpc.A')
+        class A extends Service {
             @Method()
             async doStuff() {
                 return new A2();
@@ -188,8 +187,8 @@ describe('RPCSession', it => {
             @Method() works() { return 'good!'; }
         }
 
-        @Service('org.webrpc.A')
-        class A {
+        @Name('org.webrpc.A')
+        class A extends Service {
             a2 = new A2();
             @Method()
             async doStuff() {
@@ -224,8 +223,8 @@ describe('RPCSession', it => {
         let count = 0;
         let finalizer = new FinalizationRegistry(() => count += 1);
 
-        @Service('org.webrpc.A')
-        class A {
+        @Name('org.webrpc.A')
+        class A extends Service {
             @Method()
             async doStuff() {
                 let a2 = new A2();
@@ -256,8 +255,8 @@ describe('RPCSession', it => {
             @Method() works() { return 'good!'; }
         }
 
-        @Service('org.webrpc.A')
-        class A {
+        @Name('org.webrpc.A')
+        class A extends Service {
             a2: WeakRef<A2>;
 
             @Method()

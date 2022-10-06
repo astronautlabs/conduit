@@ -1,3 +1,5 @@
+import { Service } from "./service";
+
 export const OBJECT_ID = Symbol('OBJECT_ID');
 export const REFERENCE_ID = Symbol('REFERENCE_ID');
 
@@ -11,7 +13,10 @@ export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
  * @param propertyKey 
  * @returns 
  */
- export function getRpcType(target: any, propertyKey?: string): 'service' | 'remotable' | 'event' | undefined {
+ export function getRpcType(target: any, propertyKey?: string): 'service' | 'remotable' | 'event' | 'call' | undefined {
+    if (target.prototype instanceof Service)
+        return 'remotable';
+
     if (!target)
         throw new Error(`Cannot get RPC type for undefined/null target`);
         
@@ -37,5 +42,5 @@ export function getRpcServiceName(target: any): string {
     if (typeof Reflect === 'undefined')
         return undefined;
     
-    return Reflect.getMetadata('rpc:service', target);
+    return Reflect.getMetadata('rpc:name', target);
 }
