@@ -1,11 +1,11 @@
 import { RPCChannel, SocketChannel } from "./channel";
 import { DurableSocket } from "./durable-socket";
-import { Constructor, getRpcUrl } from "./internal";
+import { AnyConstructor, Constructor, getRpcUrl } from "./internal";
 import { Proxied } from "./proxied";
 import { Remotable } from "./remotable";
 import { RPCSession } from "./session";
 
-function immediateServiceProxy<T extends object>(promise: Promise<RPCSession>, klass: Constructor<T>): Proxied<T> {
+function immediateServiceProxy<T extends object>(promise: Promise<RPCSession>, klass: AnyConstructor<T>): Proxied<T> {
     let delegate: Promise<Proxied<T>>;
 
     promise = promise.then(session => {
@@ -41,7 +41,7 @@ export class Service {
      * while the connection is established and the service object is obtained from the remote endpoint.
      * @param socketUrl The URL of the WebSocket server which supports WebRPC.
      */
-    static proxy<T extends object>(this: Constructor<T>): Proxied<T>;
+    static proxy<T extends object>(this: AnyConstructor<T>): Proxied<T>;
 
     /**
      * Construct a new proxy for this service pointing at the given WebSocket URL.
@@ -50,7 +50,7 @@ export class Service {
      * while the connection is established and the service object is obtained from the remote endpoint.
      * @param socketUrl The URL of the WebSocket server which supports WebRPC.
      */
-    static proxy<T extends object>(this: Constructor<T>, socketUrl: string): Proxied<T>;
+    static proxy<T extends object>(this: AnyConstructor<T>, socketUrl: string): Proxied<T>;
     
     /**
      * Construct a new proxy for this service pointing at the given RPCChannel.
@@ -59,7 +59,7 @@ export class Service {
      * service object is obtained from the remote endpoint.
      * @param channel A promise for obtaining the channel to use
      */
-    static proxy<T extends object>(this: Constructor<T>, channel: Promise<RPCChannel>): Proxied<T>;
+    static proxy<T extends object>(this: AnyConstructor<T>, channel: Promise<RPCChannel>): Proxied<T>;
 
     /**
      * Construct a new proxy for this service pointing at the given RPCChannel.
@@ -68,8 +68,8 @@ export class Service {
      * remote endpoint.
      * @param channel The channel to connect to
      */
-    static proxy<T extends object>(this: Constructor<T>, channel: RPCChannel): Proxied<T>;
-    static proxy<T extends object>(this: Constructor<T>, channel?: string | Promise<RPCChannel> | RPCChannel): Proxied<T> {
+    static proxy<T extends object>(this: AnyConstructor<T>, channel: RPCChannel): Proxied<T>;
+    static proxy<T extends object>(this: AnyConstructor<T>, channel?: string | Promise<RPCChannel> | RPCChannel): Proxied<T> {
         channel ??= getRpcUrl(this);
         
         return immediateServiceProxy<T>(
@@ -79,7 +79,10 @@ export class Service {
                 )
                 : Promise.resolve(channel)
             )
-            .then(channel => new RPCSession(channel)), this
+            .then(channel => new RPCSession(channel)), 
+            this
         );
     }
 }
+
+abstract class A extends Service { }
