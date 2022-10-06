@@ -10,24 +10,24 @@
 A powerful way to do RPC on the web.
 
 ```ts
-import { RPCSession, LocalChannel, Method } from '@astronautlabs/webrpc';
+import * as webrpc from '@astronautlabs/webrpc';
 
-let [channelA, channelB] = LocalChannel.makePair();
+let [channelA, channelB] = webrpc.LocalChannel.makePair();
 
-@Service('com.example.randomNumber')
+@webrpc.Name('com.example.randomNumber')
 class MyService {
-    @Method()
+    @webrpc.Method()
     getRandomNumber() {
         return Math.random();
     }
 }
 
-let sessionA = new RPCSession(channelA);
+let sessionA = new webrpc.RPCSession(channelA);
 sessionA.registerService(MyService);
 
 // ---
 
-let sessionB = new RPCSession(channelB);
+let sessionB = new webrpc.RPCSession(channelB);
 let remoteObject = await session.getRemoteService(MyService);
 
 let number = await remoteObject.getRandomNumber();
@@ -39,35 +39,35 @@ console.log(number);
 You aren't limited to singleton services with `@/webrpc`
 
 ```typescript
-import { RPCSession, LocalChannel, Method, Remotable } from '@astronautlabs/webrpc';
+import * as webrpc from '@astronautlabs/webrpc';
 
-let [channelA, channelB] = LocalChannel.makePair();
+let [channelA, channelB] = webrpc.LocalChannel.makePair();
 
-@Service('com.example.randomNumber')
+@webrpc.Name('com.example.randomNumber')
 class MyService {
-    @Method()
+    @webrpc.Method()
     getRandomGenerator(min: number, max: number) {
         return new RandomGenerator(min, max);
     }
 }
 
-@Remotable()
+@webrpc.Remotable()
 class RandomGenerator {
     constructor(readonly min: number, max: number) {
     }
 
-    @Method()
+    @webrpc.Method()
     random() {
         return min + Math.random() * (max - min) | 0;
     }
 }
 
-let sessionA = new RPCSession(channelA);
+let sessionA = new webrpc.RPCSession(channelA);
 sessionA.registerService(MyService);
 
 // ---
 
-let sessionB = new RPCSession(channelB);
+let sessionB = new webrpc.RPCSession(channelB);
 let remoteObject = await session.getRemoteService(MyService);
 
 let generator = await remoteObject.getRandomGenerator(4, 8);
@@ -80,11 +80,11 @@ console.log(await generator.random()); // 5
 # Events
 
 ```typescript
-import { RPCSession, LocalChannel, Event } from '@astronautlabs/webrpc';
+import * as webrpc from '@astronautlabs/webrpc';
 
-let [channelA, channelB] = LocalChannel.makePair();
+let [channelA, channelB] = webrpc.LocalChannel.makePair();
 
-@Service('com.example.randomNumber')
+@webrpc.Name('com.example.randomNumber')
 class MyService {
     constructor() {
         setTimeout(() => this._timer.next(), 1000);
@@ -102,7 +102,7 @@ sessionA.registerService(MyService);
 
 // ---
 
-let sessionB = new RPCSession(channelB);
+let sessionB = new webrpc.RPCSession(channelB);
 let remoteObject = await session.getRemoteService(MyService);
 
 let subscription = await remoteObject.timer.subscribe(() => console.log(`tick`));
