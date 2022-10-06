@@ -9,6 +9,7 @@ export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
 
 /**
  * Get the RPC type assigned to the given target (or property of target).
+ * @internal
  * @param target 
  * @param propertyKey 
  * @returns 
@@ -38,9 +39,26 @@ export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
     }
 }
 
+/**
+ * @internal
+ * @param target 
+ * @returns 
+ */
+export function getRpcUrl(target: any): string {
+    if (typeof Reflect === 'undefined')
+        return undefined;
+    
+    return String(Reflect.getMetadata('rpc:url', target));
+}
+
+/**
+ * @internal
+ * @param target 
+ * @returns 
+ */
 export function getRpcServiceName(target: any): string {
     if (typeof Reflect === 'undefined')
         return undefined;
     
-    return Reflect.getMetadata('rpc:name', target);
+    return String(Reflect.getMetadata('rpc:name', target));
 }
