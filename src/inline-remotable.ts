@@ -6,7 +6,7 @@ export function inlineRemotable<T>(object: T): T {
     for (let key of Object.keys(object)) {
         if (typeof object[key] !== 'function')
             continue;
-        Reflect.defineMetadata('rpc:type', 'call', InlineRemotable.prototype, key);
+        Reflect.defineMetadata('webrpc:type', 'call', InlineRemotable.prototype, key);
         instance[key] = (...args) => {
             let result = object[key](...args);
             if (result instanceof Promise)

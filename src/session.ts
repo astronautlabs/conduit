@@ -2,10 +2,10 @@
 
 import { Observable } from 'rxjs';
 import { v4 as uuid } from 'uuid';
-import { RPCChannel, SocketChannel } from './channel';
+import { Channel } from './channel';
 import { DurableSocket } from './durable-socket';
 import { inlineRemotable } from './inline-remotable';
-import { AnyConstructor, Constructor, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
+import { AnyConstructor, Constructor, getRpcServiceName, getRpcServiceVersion, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
 import { Message } from './message';
 import { Method } from './method';
 import { Proxied, RemoteSubscription } from './proxied';
@@ -13,7 +13,8 @@ import { isRemoteRef, RemoteRef } from './remote-ref';
 import { isRequest, Request } from './request';
 import { isResponse, Response } from './response';
 import { RPCProxy } from './rpc-proxy';
-import { Service } from './service';
+import { Service, Version } from './service';
+import * as semver from 'semver';
 
 function isRemotable(obj: any): boolean {
     return obj && typeof obj === 'object' 
@@ -34,15 +35,91 @@ interface InFlightRequest {
     responseHandler: (response: any) => void;
 }
 
-export type ServiceFactory<T = any> = (session: RPCSession) => T;
+export type ServiceFactory<T = any> = (session: Session) => T;
+
+interface ServiceDescription {
+    identifier: string;
+    version: string;
+    summary?: string;
+    description?: string;
+    website?: string;
+    author?: string;
+}
+
+interface RemoteClass<T = any> {
+    new (...args): T;
+
+    name: string;
+    
+}
+
+type ServiceImplementation = ServiceDescription & {
+    /**
+     * A function used to create or otherwise obtain a service instance per connection. 
+     * A factory can return a shared instance of the service or create a new object on 
+     * each invocation.
+     */
+    factory: ServiceFactory;
+
+    /**
+     * Specify a list of allowed methods. Note that you can also annotate your methods with @webrpc.Method() to 
+     * declaratively add to this list.
+     */
+    allowedMethods: string[];
+};
+
+type ServiceInit = Partial<ServiceImplementation>;
+
+@Service('org.webrpc.serviceResolver')
+@Version('1.0.0')
+export abstract class ServiceResolver {
+    abstract getService<T>(identity: string, version?: string): Promise<T>;
+}
 
 @Service(`org.webrpc.session`)
-export class RPCSession {
-    constructor(readonly channel: RPCChannel) {
-        this._remote = RPCProxy.create<RPCSession>(this, getRpcServiceName(RPCSession), '');
-        this.registerService(RPCSession, () => this);
-        this.registerLocalObject(this, getRpcServiceName(RPCSession));
+@Version('1.0.0')
+export abstract class SessionInterface extends ServiceResolver {
+    abstract describeServices(): Promise<ServiceDescription[]>;
+    abstract getService<T>(identity: string, version?: string): Promise<T>;
+    abstract finalizeRef(refID: string);
+    abstract subscribeToEvent<T>(eventSource: any, eventName: string, eventReceiver: any);
+}
+
+/**
+ * Represents the local side of a two-sided remote procedure call interface.
+ * Use `session.remote` to access the remote side.
+ */
+@Service(`org.webrpc.session`)
+@Version('1.0.0')
+export class Session extends SessionInterface {
+    /**
+     * @internal
+     * @param channel 
+     */
+    constructor(readonly channel: Channel) {
+        super();
+        
+        this._globalServiceResolver = RPCProxy.create<Session>(this, 'S', '');
+        this.registerService(Session, { factory: () => this });
+        this.registerLocalObject(this, getRpcServiceName(Session));
         channel.received.subscribe(data => this.onReceiveMessage(this.decodeMessage(data)));
+    }
+
+    private async init() {
+        // We need to establish which WebRPC remote object reference is responsible for session-level
+        // communication (which provides service discovery / introspection and other low-level features 
+        // of the WebRPC protocol). This request is performed to allow for negotiation of the session interface.
+        // The remote client may provide a compatible shim for an older version or respond with an exception
+        // indicating that the requested WebRPC version is not servicable by this endpoint.
+        //
+        // When no session object reference has yet been obtained, the object reference for the session is sent as 
+        // ID 'S'.
+        // 
+        // Note: Once this reference is set, the `serviceResolver` property becomes equivalent to it. This allows 
+        // for versioning the initial org.webrpc.Session object, and any other services registered in the org.webrpc.*
+        // reverse-DNS namespace.
+
+        this._remote = await this.getRemoteService(SessionInterface);
     }
 
     /**
@@ -50,12 +127,37 @@ export class RPCSession {
      * the socket as the underlying channel.
      * @param url 
      */
-    static async connect(url: string): Promise<RPCSession> {
-        return new RPCSession((await new DurableSocket(url).waitUntilReady()).asChannel());
+    static async connect(url: string): Promise<Session> {
+        let session = new Session((await new DurableSocket(url).waitUntilReady()).asChannel());
+        await session.init();
+        return session;
     }
 
-    private _remote: Proxied<RPCSession>;
+    /**
+     * The versioned RPCSession object on the remote side
+     */
+    private _remote: Proxied<SessionInterface>;
+
+    /**
+     * The initial remote represents the "default" remote session object, which is typically the one corresponding
+     * to a query of "latest". This session object is only expected to be able to perform getService() calls.
+     */
+    private _globalServiceResolver: Proxied<ServiceResolver>;
+    
+    /**
+     * The remote RPCSession object. When connection has succeeded, this will be versioned appropriately based on the 
+     * supported client/server WebRPC versions.
+     */
     get remote() { return this._remote; }
+
+    /**
+     * Refers to the object currently responsible for service resolution. This is initially the global service resolver \
+     * object which is only expected to be able to resolve versioned objects within the `org.webrpc.*` reverse-DNS 
+     * namespace. Once an `org.webrpc.session` object is acquired, that object is used as the service resolver, and then
+     * it is expected to be able to resolve all registered services. This is designed to allow the org.webrpc.* namespace
+     * itself to be versioned.
+     */
+    private get serviceResolver(): Proxied<ServiceResolver> { return this._remote || this._globalServiceResolver; }
 
     async getRemoteService<T>(serviceIdentity: AnyConstructor<T>): Promise<Proxied<T>>
     async getRemoteService<T = any>(serviceIdentity: string): Promise<Proxied<T>>
@@ -65,7 +167,7 @@ export class RPCSession {
         
         let serviceIdentity: string = serviceIdentityOrClass;
         this.log(`Finding remote service named '${serviceIdentity}...'`);
-        return this.remote.getLocalService(serviceIdentity);
+        return this.serviceResolver.getService(serviceIdentity);
     }
 
     private rawSend(message: Message) {
@@ -205,8 +307,8 @@ export class RPCSession {
         this.channel.close?.();
     }
 
-    
-    private serviceRegistry = new Map<string, ServiceFactory>();
+    private serviceVersions = new Map<string, string[]>();
+    private serviceRegistry = new Map<string, ServiceImplementation>();
 
     /**
      * This map tracks individual objects which we've exported via RPC via object ID.
@@ -355,54 +457,120 @@ export class RPCSession {
     }
 
     getLocalObjectById(id: string) {
+        // It is important that the other side be able to communicate with the remote session object from the moment
+        // a connection is established. Thus, the 'S' ID is available to refer to it. This is usually only used to 
+        // perform the initial getService('org.webrpc.session', 'VERSION') call, which establishes the WebRPC object
+        // reference used for all subsequent session-level method calls.
+        if (id === 'S')
+            return this;
+        
         return this.localObjectRegistry.get(id)?.deref();
     }
 
-    registerService(klass: Constructor, factory?: ServiceFactory) {
-        factory ??= () => new klass();
-
+    /**
+     * Register a new service which will be made available to the remote peer.
+     * 
+     * The provided constructor MAY be annotated with 'webrpc:service' (see @webrpc.Service decorator), in which case
+     * the given string identifier will act as the default identifier used to register this service. Alternatively,
+     * the 'identifier' option may be specified in the passed ServiceInit.
+     * 
+     * The identifier used for registration determines the name used by remote peers to acquire an instance of this 
+     * service. The identifier MUST be a valid reverse-DNS identifier (ie com.example.FooBar). You MUST only use DNS 
+     * namespaces you control when defining service interfaces.
+     * 
+     * The constructor MAY also define 'webrpc:version' (see @webrpc.Version decorator), in which case the 
+     * given string identifier will act as the default version used to register this service. Alternatively,
+     * the 'version' option may be specified in the passed ServiceInit. 
+     * 
+     * The version used for registration determines the compatibility of this service registration with requests to 
+     * acquire it. Given multiple versions registered for a given service identifier, WebRPC will select the best version
+     * according to Semantic Versioning.
+     * 
+     * @param klass The service class constructor to use
+     * @param init The options used to define this service registration.
+     */
+    registerService(klass: Constructor, init?: ServiceInit) {
         if (getRpcType(klass) !== 'remotable')
-            throw new Error(`Class '${klass.name}' must be marked with @Service() to be registered as a service`);
+            throw new Error(`Class '${klass.name}' must be marked with @Service() to be registered as a service [type=${getRpcType(klass)}]`);
         
-        let serviceName = getRpcServiceName(klass);
+        this.addService({
+            identifier: getRpcServiceName(klass),
+            factory: () => new klass(),
+            allowedMethods: [],
+            version: getRpcServiceVersion(klass) ?? '*',
+            ...init
+        });
+    }
 
-        this.log(`Registering service with ID ${serviceName}...`);
+    private addService(impl: ServiceImplementation) {
+        impl.version ??= '*';
 
-        if (typeof serviceName !== 'string')
+        if (typeof impl.identifier !== 'string')
             throw new Error(`Service name must be a string`);
         
-        if (this.serviceRegistry.has(serviceName)) {
-            throw new Error(
-                `Cannot register instance of '${klass.name}' with service name '${serviceName}' ` 
-                + `as an instance of '${this.serviceRegistry.get(serviceName).constructor.name}' is already ` 
-                + `registered with that name.`
-            );
-        }
+        if (typeof impl.version !== 'string')
+            throw new Error(`Service version must be a string`);
+        
+        let serviceAndVersion = `${impl.identifier}@${impl.version}`;
 
-        this.serviceRegistry.set(serviceName, factory);
-        this.log(`Registered service with ID ${serviceName}`);
+        if (this.serviceRegistry.has(serviceAndVersion))
+            throw new Error(`WebRPC service '${serviceAndVersion}' is already registered.`);
+
+        this.serviceRegistry.set(serviceAndVersion, impl);
+        let versions = this.serviceVersions.get(impl.identifier) ?? [];
+        versions.push(impl.version);
+        this.serviceVersions.set(impl.identifier, versions);
+    }
+
+    async describeRemoteServices(): Promise<ServiceDescription[]> {
+        return await this.remote.describeServices();
     }
 
     /**
      * @internal
      */
     @Method()
-    async getLocalService<T>(identity: string): Promise<T> {
+    async describeServices(): Promise<ServiceDescription[]> {
+        return Array.from(this.serviceRegistry.values());
+    }
+
+    /**
+     * @internal
+     */
+    @Method()
+    async getService<T>(identity: string, version?: string): Promise<T> {
+        version ??= 'latest';
+        
         this.log(`Finding local service named '${identity}...'`);
 
-        if (!this.serviceRegistry.has(identity)) {
-            this.log(`No service registered with ID '${identity}'`);
+        let selectedVersion = (this.serviceVersions.get(identity) ?? [])
+            .filter(availableVersion => !['*'].includes(availableVersion))
+            .sort((a, b) => -semver.compare(a, b))
+            .find(availableVersion => version === 'latest' || semver.satisfies(availableVersion, version))
+        ;
+
+        if (!selectedVersion && this.serviceRegistry.has(`${identity}@*`))
+            selectedVersion = '*';
+        
+        let serviceAndVersion = `${identity}@${selectedVersion}`;
+        
+        if (!this.serviceRegistry.has(serviceAndVersion)) {
+            if (this.serviceVersions.has(identity))
+                throw new Error(`No version of service '${identity}' satisfies requested version ${version}, available: ${JSON.stringify(this.serviceVersions.get(identity))}`);
+            else
+                throw new Error(`Service '${serviceAndVersion}' is not registered on this endpoint.`)
             return null;
         }
      
-        if (this.localObjectRegistry.has(identity)) {
-            this.log(`getLocalService(): Returning an existing service object for ${identity}...`);
-            return this.localObjectRegistry.get(identity).deref();
+        if (this.localObjectRegistry.has(serviceAndVersion)) {
+            this.log(`getLocalService(): Returning an existing service object for ${serviceAndVersion}...`);
+            return this.localObjectRegistry.get(serviceAndVersion).deref();
         }
         
-        this.log(`getLocalService(): Creating a new service object for ${identity}...`);
-        let serviceObject = this.serviceRegistry.get(identity)(this);
-        this.registerLocalObject(serviceObject, identity);
+        this.log(`getLocalService(): Creating a new service object for ${serviceAndVersion}...`);
+        let serviceObject = this.serviceRegistry.get(serviceAndVersion).factory(this);
+        this.registerLocalObject(serviceObject, serviceAndVersion);
+
         return serviceObject;
     }
 

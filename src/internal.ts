@@ -11,7 +11,7 @@ export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
  * @param propertyKey 
  * @returns 
  */
- export function getRpcType(target: any, propertyKey?: string): 'service' | 'remotable' | 'event' | undefined {
+ export function getRpcType(target: any, propertyKey?: string): 'service' | 'remotable' | 'event' | 'call' | undefined {
     if (!target)
         throw new Error(`Cannot get RPC type for undefined/null target`);
         
@@ -26,7 +26,7 @@ export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
     }
 
     try {
-        return Reflect.getMetadata('rpc:type', target, propertyKey) || 'none';
+        return Reflect.getMetadata('webrpc:type', target, propertyKey) || 'none';
     } catch (e) {
         debugger;
         throw e;
@@ -37,5 +37,12 @@ export function getRpcServiceName(target: any): string {
     if (typeof Reflect === 'undefined')
         return undefined;
     
-    return Reflect.getMetadata('rpc:service', target);
+    return Reflect.getMetadata('webrpc:service', target);
+}
+
+export function getRpcServiceVersion(target: any): string {
+    if (typeof Reflect === 'undefined')
+        return undefined;
+    
+    return Reflect.getMetadata('webrpc:version', target);
 }

@@ -1,5 +1,5 @@
 export function Method() {
     return (target, propertyKey) => {
-        Reflect.defineMetadata('rpc:type', 'call', target, propertyKey);
+        Reflect.defineMetadata('webrpc:type', 'call', target, propertyKey);
     }
 }

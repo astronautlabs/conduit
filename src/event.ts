@@ -1,6 +1,6 @@
 
 export function Event() {
     return (target, propertyKey) => {
-        Reflect.defineMetadata('rpc:type', 'event', target, propertyKey);
+        Reflect.defineMetadata('webrpc:type', 'event', target, propertyKey);
     }
 }

@@ -5,57 +5,11 @@ import { Service } from "./service";
 import { expect } from "chai";
 import { Event } from "./event";
 import { Subject } from "rxjs";
-import { RPCSession } from "./session";
 import { Proxied } from "./proxied";
-import { RPCChannel } from "./channel";
-
-export class TestChannel implements RPCChannel {
-    private _received = new Subject<string>();
-    get received() { return this._received.asObservable(); }
-
-    send(message: string) {
-        setTimeout(() => {
-            this.otherChannel.receive(message);
-        }, this.sendDelay);
-    }
-
-    /**
-     * How long do you want messages received to be delayed by.
-     */
-    receiveDelay = 0;
-    sendDelay = 0;
-
-    private receive(message: string) {
-        setTimeout(() => {
-            this._received.next(message);
-        }, this.receiveDelay);
-    }
-    
-    private otherChannel: TestChannel;
-
-    static makePair(): [ TestChannel, TestChannel ] {
-        let a = new TestChannel();
-        let b = new TestChannel();
-
-        a.otherChannel = b;
-        b.otherChannel = a;
-
-        return [a, b];
-    }
-}
+import { getRpcServiceName } from "./internal";
+import { sessionPair, TestChannel } from "./testlib";
 
 describe('RPCSession', it => {
-    function sessionPair() {
-        let [channelA, channelB] = TestChannel.makePair();
-        let sessionA = new RPCSession(channelA);
-        let sessionB = new RPCSession(channelB);
-
-        sessionA.tag = 'A';
-        sessionB.tag = 'B';
-
-        return [sessionA, sessionB];
-    }
-
     it('can accept abstract classes', async () => {
         let [sessionA, sessionB] = sessionPair();
 
@@ -74,6 +28,8 @@ describe('RPCSession', it => {
         sessionA.registerService(AImpl);
 
         let aProxy = await sessionB.getRemoteService(A);
+
+        expect(aProxy, `Should have found the service via its class reference. Detected service name '${getRpcServiceName(A)}'. Error`).to.exist;
         let str = await aProxy.info();
         expect(str).to.equal('this is A');
     });

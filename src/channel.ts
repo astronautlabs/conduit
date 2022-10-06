@@ -1,12 +1,12 @@
 import { Observable, Subject } from "rxjs";
 
-export interface RPCChannel {
+export interface Channel {
     received: Observable<string>;
     send(message: string);
     close?();
 }
 
-export class LocalChannel implements RPCChannel {
+export class LocalChannel implements Channel {
     private _received = new Subject<string>();
     get received() { return this._received.asObservable(); }
 
@@ -27,7 +27,7 @@ export class LocalChannel implements RPCChannel {
     }
 }
 
-export class SocketChannel implements RPCChannel {
+export class SocketChannel implements Channel {
     constructor(private socket: WebSocket | RTCDataChannel) {
         socket.addEventListener('message', (ev: MessageEvent<any>) => this._received.next(ev.data));
     }
@@ -44,7 +44,7 @@ export class SocketChannel implements RPCChannel {
     }
 }
 
-export class WindowChannel implements RPCChannel {
+export class WindowChannel implements Channel {
     constructor(private remoteWindow: Window, origin?: string) {
         window.addEventListener('message', this.handler = ev => {
             if (origin && ev.origin !== origin)

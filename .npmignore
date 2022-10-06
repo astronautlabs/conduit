@@ -1,3 +1,8 @@
 node_modules/
 private/
 .vscode/
+
+src/testlib/**
+src/**/*.test.ts
+dist/testlib/**
+src/**/*.test.js

@@ -1,7 +1,7 @@
 import { inlineRemotable } from "./inline-remotable";
 import { OBJECT_ID, REFERENCE_ID } from "./internal";
 import { Proxied } from "./proxied";
-import { RPCSession } from "./session";
+import { Session } from "./session";
 
 export class RPCProxy {
     private constructor(id: string, referenceId: string) {
@@ -13,7 +13,7 @@ export class RPCProxy {
     [REFERENCE_ID]?: string;
 
 
-    static create<T = any>(session: RPCSession, objectId: string, referenceId: string): Proxied<T> {
+    static create<T = any>(session: Session, objectId: string, referenceId: string): Proxied<T> {
         const methodMap = new Map<string, Function>();
 
         let proxy: Proxied<T>;
