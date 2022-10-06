@@ -20,11 +20,8 @@ import { SocketChannel } from "./channel";
     ) {
         this._sessionId = sessionId;
         this.connect();
-    }
-
-    async waitUntilReady() {
-        await new Promise<void>((resolve, reject) => {
-            this.addEventListener('open', () => resolve());
+        this.ready = new Promise<this>((resolve, reject) => {
+            this.addEventListener('open', () => resolve(this));
             this.addEventListener('close', e => {
                 if (e.code === 503) {
                     console.error(`Failed to connect to chat service!`);
@@ -32,7 +29,21 @@ import { SocketChannel } from "./channel";
                 }
             });
         });
-        return this;
+
+        let wasRestored: () => void = () => {};
+        this.addEventListener('lost', () => this.ready = new Promise<this>((res, _) => wasRestored = () => res(this)));
+        this.addEventListener('restore', e => wasRestored());
+    }
+
+    ready: Promise<this>;
+
+    /**
+     * Wait until this connection is ready to receive a message. If connection is lost, this method will
+     * return a new promise that will resolve when connection is restored.
+     * @returns 
+     */
+    waitUntilReady() {
+        return this.ready;
     }
 
     asChannel() {
