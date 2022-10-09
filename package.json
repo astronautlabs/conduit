@@ -12,7 +12,7 @@
     "build:esm": "tsc -b tsconfig.esm.json",
     "build": "npm run build:cjs && npm run build:esm",
     "test": "npm run build:cjs && node --expose-gc --enable-source-maps dist/test",
-    "prepublishOnly": "npm run test"
+    "prepublishOnly": "npm run build && npm test"
   },
   "author": "Astronaut Labs, LLC",
   "license": "MIT",
