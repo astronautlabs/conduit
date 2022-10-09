@@ -1,4 +1,5 @@
 import { Observable, Subject } from "rxjs";
+import { take } from "rxjs/operators";
 import { DurableSocket } from "./durable-socket";
 import { ResettableReplaySubject } from "./resettable-subject";
 
@@ -53,9 +54,9 @@ export class LocalChannel implements RPCChannel {
 export class SocketChannel implements RPCChannel {
     constructor(readonly socket: WebSocket | RTCDataChannel) {
         if (socket.readyState === WebSocket.OPEN) {
-            this._ready.next();
+            this.markReady();
         } else {
-            socket.addEventListener('open', () => this._ready.next());
+            socket.addEventListener('open', () => this.markReady());
         }
         socket.addEventListener('message', (ev: MessageEvent<any>) => this._received.next(ev.data));
         socket.addEventListener('close', () => this.stateWasLost(`Disconnected permanently`));
@@ -86,7 +87,7 @@ export class SocketChannel implements RPCChannel {
     }
 
     async send(message: any) {
-        await this.ready.toPromise();
+        await this.ready.pipe(take(1)).toPromise();
         this.socket.send(message)
     }
 
