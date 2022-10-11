@@ -1,4 +1,4 @@
-import { SocketChannel } from "./channel";
+import { DurableSocketChannel } from "./channel";
 
 /**
  * Provides a durable WebSocket. Such a socket will automatically handle reconnection including
@@ -47,7 +47,7 @@ import { SocketChannel } from "./channel";
     }
 
     asChannel() {
-        return new SocketChannel(this);
+        return new DurableSocketChannel(this);
     }
 
     private connect() {
