@@ -131,7 +131,34 @@ export class RPCSession {
     }
 
     protected async performCall(request: Request): Promise<any> {
-        return request.receiver[request.method](...request.parameters);
+        if (typeof Zone !== 'undefined') {
+            return Zone.current.fork({
+                name: 'RPCSessionZone',
+                properties: {
+                    'rpc:session': this,
+                    'rpc:request': request
+                }
+            }).run(() => request.receiver[request.method](...request.parameters));
+        } else {
+            return request.receiver[request.method](...request.parameters);
+        }
+    }
+
+    /**
+     * Retrieve the RPCSession that is being served by the current remote method call.
+     * This is only available when Zone.js is loaded.
+     * @returns 
+     */
+    static current(): RPCSession {
+        if (typeof Zone !== 'undefined') {
+            return Zone.current.get('rpc:session');
+        }
+    }
+
+    static currentRequest() {
+        if (typeof Zone !== 'undefined') {
+            return Zone.current.get('rpc:request');
+        }
     }
 
     private async onReceiveMessage(message: Message) {
