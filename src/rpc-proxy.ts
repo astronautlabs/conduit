@@ -28,6 +28,8 @@ export class RPCProxy {
                     return referenceId;
                 if (p === 'toJSON')
                     return () => session.remoteRef(proxy);
+                if (p === 'toString')
+                    return () => `[RemoteObject ${objectId}]`;
                 if (p === 'then')
                     return undefined;
                 
