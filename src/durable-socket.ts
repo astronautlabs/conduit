@@ -139,7 +139,7 @@ import { DurableSocketChannel } from "./channel";
             if (this.lastPong < Date.now() - this.pingKeepAliveInterval) {
                 console.log(`[Socket] No keep-alive response in ${this.pingKeepAliveInterval}ms. Forcing reconnect... [${this.url}]`);
                 try {
-                    this._socket?.close();
+                    this.handleLost();
                 } catch (e) {
                     console.error(`[Socket] Failed to close socket after timeout waiting for pong: ${e.message} [${this.url}]`);
                 }
