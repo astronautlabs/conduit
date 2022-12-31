@@ -1,6 +1,6 @@
 /// <reference types="reflect-metadata" />
 
-import { Observable } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { v4 as uuid } from 'uuid';
 import { RPCChannel, SocketChannel } from './channel';
 import { DurableSocket } from './durable-socket';
@@ -21,7 +21,7 @@ function isRemotable(obj: any): boolean {
         && (getRpcType(obj.constructor) === 'remotable' || obj instanceof RPCProxy);
 }
 
-interface InFlightRequest {
+export interface InFlightRequest {
     /**
      * It is important that we hold the request, because we must not garbage collect any objects referenced by 
      * the request in the mean time. Normally this isn't possible because there's a hard reference within our 
@@ -221,6 +221,7 @@ export class RPCSession {
             this.log(`Handling response for request ${message.id}...`);
             this._requestMap.delete(message.id);
             inFlightRequest.responseHandler(message);
+            this.onRequestCompleted(inFlightRequest);
             return;
         }
 
@@ -230,6 +231,44 @@ export class RPCSession {
         }
 
         console.error(`Unknown message type from server '${message.type}'`);
+    }
+
+    /**
+     * Returns true if there are no outstanding requests or remotely held references.
+     */
+    get idle() {
+        return this.pendingRequestCount === 0 && this.remoteReferenceCount === 0;
+    }
+
+    /**
+     * The number of in-flight requests
+     */
+    get pendingRequestCount() {
+        return this._requestMap.size;
+    }
+
+    /**
+     * The number of remotely held references
+     */
+    get remoteReferenceCount() {
+        return this.remoteRefRegistry.size;
+    }
+
+    private _becameIdle = new Subject<void>();
+    private _becameIdle$ = this._becameIdle.asObservable();
+
+    /**
+     * Fired when the session has become idle (no pending requests or remote references).
+     */
+    get becameIdle() { return this._becameIdle$; }
+
+    /**
+     * Called when a request is finished processing.
+     * @param request 
+     */
+    onRequestCompleted(request: InFlightRequest) {
+        if (this.idle)
+            this._becameIdle.next();
     }
 
     /**
@@ -471,8 +510,14 @@ export class RPCSession {
      */
     @Method()
     async finalizeRef(refID: string) {
+        if (!this.remoteRefRegistry.has(refID)) {
+            console.warn(`[webrpc.Session] Attempt to finalize reference '${refID}', but it is not known! This is a bug.`);
+        }
+            
         this.log(`Deleting reference '${refID}'`);
         this.remoteRefRegistry.delete(refID);
+        if (this.idle)
+            this._becameIdle.next();
     }
 
     @Method()
