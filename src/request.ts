@@ -4,6 +4,7 @@ export interface Request {
     type: 'request';
     id: string;
     receiver: any;
+    metadata: Record<string, any>;
     method: string;
     parameters: any[];
 }
