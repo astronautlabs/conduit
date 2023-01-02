@@ -464,7 +464,7 @@ export class RPCSession {
      */
     @Method()
     async getLocalService<T>(identity: string): Promise<T> {
-        this.log(`Finding local service named '${identity}...'`);
+        this.log(`Finding local service named '${identity}'...`);
 
         if (!this.serviceRegistry.has(identity)) {
             this.log(`No service registered with ID '${identity}'`);
