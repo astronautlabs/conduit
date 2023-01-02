@@ -96,7 +96,7 @@ export class RPCSession {
 
     tag: string;
 
-    call<ResponseT>(receiver: any, method: string, ...parameters: any[]): Promise<ResponseT> {
+    call<ResponseT>(receiver: any, method: string, parameters: any[], metadata: Record<string,any> = {}): Promise<ResponseT> {
         if (!receiver)
             throw new Error(`Must provide a receiver object for remote call`);
         if (!(receiver instanceof RPCProxy))
@@ -109,7 +109,8 @@ export class RPCSession {
             id: uuid(),
             receiver,
             method,
-            parameters
+            parameters,
+            metadata
         };
         
         this.log(` - Before encoding:`);

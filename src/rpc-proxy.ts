@@ -34,7 +34,7 @@ export class RPCProxy {
                     return undefined;
                 
                 if (!methodMap.has(String(p))) {
-                    let method = (...args) => session.call(proxy, String(p), ...args);
+                    let method = (...args) => session.call(proxy, String(p), args);
                     method['subscribe'] = (observer: (t: any) => void) => {
                         return session.remote.subscribeToEvent(proxy, String(p), inlineRemotable({
                             next: t => observer(t)
