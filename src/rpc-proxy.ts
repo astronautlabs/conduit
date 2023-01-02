@@ -1,8 +1,10 @@
 import { inlineRemotable } from "./inline-remotable";
 import { OBJECT_ID, REFERENCE_ID } from "./internal";
 import { Proxied } from "./proxied";
+import { Remotable } from "./remotable";
 import { RPCSession } from "./session";
 
+@Remotable()
 export class RPCProxy {
     private constructor(id: string, referenceId: string) {
         this[OBJECT_ID] = id;
