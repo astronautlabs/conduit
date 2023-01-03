@@ -180,7 +180,7 @@ export class RPCSession {
 
             // The ordering is important here. We *first* check if the property is a method, which would 
             // allow custom proxies to materialize the rpc:type metadata on the fly. 
-            
+
             let isFunction = typeof message.receiver[message.method] === 'function';
             let rpcType = getRpcType(message.receiver, message.method);
             if (isFunction && ['call', 'any'].includes(rpcType)) {
@@ -543,11 +543,14 @@ export class RPCSession {
         if (!(eventReceiver instanceof RPCProxy))
             throw new Error(`eventReceiver must be a local object`); // audience of this message is the remote side here
         
+        // The ordering is important here. We *first* get the property, which would 
+        // allow custom proxies to materialize the rpc:type metadata on the fly. 
+        
+        let observable: Observable<any> = eventSource[eventName];
         let rpcType = getRpcType(eventSource, eventName);
         if (!['event', 'any'].includes(rpcType))
             throw new Error(`The '${eventName}' property is not an event.`);
 
-        let observable: Observable<any> = eventSource[eventName];
 
         if (!observable.subscribe) {
             throw new Error(`The '${eventName}' property is not observable.`);
