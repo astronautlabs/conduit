@@ -96,7 +96,7 @@ export class RPCSession {
 
     tag: string;
 
-    call<ResponseT>(receiver: any, method: string, parameters: any[], metadata: Record<string,any> = {}): Promise<ResponseT> {
+    async call<ResponseT>(receiver: any, method: string, parameters: any[], metadata: Record<string,any> = {}): Promise<ResponseT> {
         if (!receiver)
             throw new Error(`Must provide a receiver object for remote call`);
         if (!(receiver instanceof RPCProxy))
@@ -178,7 +178,8 @@ export class RPCSession {
                 return;
             }
 
-            if (getRpcType(message.receiver, message.method) === 'call' && typeof message.receiver[message.method] === 'function') {
+            let rpcType = getRpcType(message.receiver, message.method);
+            if (['call', 'any'].includes(rpcType) && typeof message.receiver[message.method] === 'function') {
                 let value;
                 let error;
                 
@@ -538,7 +539,8 @@ export class RPCSession {
         if (!(eventReceiver instanceof RPCProxy))
             throw new Error(`eventReceiver must be a local object`); // audience of this message is the remote side here
         
-        if (getRpcType(eventSource, eventName) !== 'event')
+        let rpcType = getRpcType(eventSource, eventName);
+        if (!['event', 'any'].includes(rpcType))
             throw new Error(`The '${eventName}' property is not an event.`);
 
         let observable: Observable<any> = eventSource[eventName];
