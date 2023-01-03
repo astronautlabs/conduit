@@ -1,6 +1,6 @@
 {
   "name": "@astronautlabs/webrpc",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "",
   "main": "dist/index.js",
   "module": "dist.esm/index.js",
