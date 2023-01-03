@@ -6,7 +6,7 @@ import { TestChannel } from "./test-channel";
 import { getRpcType } from "./internal";
 
 describe('RPCProxy', it => {
-    it.only('is remotable', () => {
+    it('is remotable', () => {
         let [a, b] = TestChannel.makePair();
         let sessionA = new RPCSession(a);
         let proxy = RPCProxy.create(sessionA, 'abcdef', 'abcdef');
