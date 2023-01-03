@@ -178,8 +178,12 @@ export class RPCSession {
                 return;
             }
 
+            // The ordering is important here. We *first* check if the property is a method, which would 
+            // allow custom proxies to materialize the rpc:type metadata on the fly. 
+            
+            let isFunction = typeof message.receiver[message.method] === 'function';
             let rpcType = getRpcType(message.receiver, message.method);
-            if (['call', 'any'].includes(rpcType) && typeof message.receiver[message.method] === 'function') {
+            if (isFunction && ['call', 'any'].includes(rpcType)) {
                 let value;
                 let error;
                 
