@@ -545,7 +545,7 @@ export class RPCSession {
         
         // The ordering is important here. We *first* get the property, which would 
         // allow custom proxies to materialize the rpc:type metadata on the fly. 
-        
+
         let observable: Observable<any> = eventSource[eventName];
         let rpcType = getRpcType(eventSource, eventName);
         if (!['event', 'any'].includes(rpcType))
@@ -556,7 +556,7 @@ export class RPCSession {
             throw new Error(`The '${eventName}' property is not observable.`);
         }
 
-        let subscription = observable.subscribe(value => (eventReceiver as any).next(value));
+        let subscription = await observable.subscribe(value => (eventReceiver as any).next(value));
 
         return inlineRemotable<RemoteSubscription>({
             unsubscribe: async () => {
