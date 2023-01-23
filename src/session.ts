@@ -183,7 +183,8 @@ export class RPCSession {
 
             let isFunction = typeof message.receiver[message.method] === 'function';
             let rpcType = getRpcType(message.receiver, message.method);
-            if (isFunction && ['call', 'any'].includes(rpcType)) {
+            let allowAll = Reflect.getMetadata('rpc:allow-all-calls', message.receiver);
+            if (isFunction && (['call', 'any'].includes(rpcType) || allowAll === true)) {
                 let value;
                 let error;
                 
@@ -548,9 +549,10 @@ export class RPCSession {
 
         let observable: Observable<any> = eventSource[eventName];
         let rpcType = getRpcType(eventSource, eventName);
-        if (!['event', 'any'].includes(rpcType))
-            throw new Error(`The '${eventName}' property is not an event.`);
+        let allowAll = Reflect.getMetadata('rpc:allow-all-calls', eventSource);
 
+        if (!['event', 'any'].includes(rpcType) && allowAll !== true)
+            throw new Error(`The '${eventName}' property is not an event.`);
 
         if (!observable.subscribe) {
             throw new Error(`The '${eventName}' property is not observable.`);

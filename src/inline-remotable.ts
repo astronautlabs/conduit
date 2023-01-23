@@ -17,3 +17,15 @@ export function inlineRemotable<T>(object: T): T {
 
     return instance;
 }
+
+/**
+ * Instruct webrpc to allow all method calls and event subscriptions on 
+ * the given object. This is useful when creating custom proxies, as well 
+ * as when passing an object from one RPC session to another (ie relaying).
+ * @param object 
+ * @returns 
+ */
+export function bypassSecurityAllowAllCalls<T>(object: T): T {
+    Reflect.defineMetadata('rpc:allow-all-calls', true, object);
+    return object;
+}
