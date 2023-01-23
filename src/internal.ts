@@ -20,19 +20,12 @@ export type AnyConstructor<T = any> = Constructor<T> | AbstractConstructor<T>;
 
     if (!target)
         throw new Error(`Cannot get RPC type for undefined/null target`);
-        
-    if (propertyKey) {
-        if (target.constructor.prototype !== target) {
-            if (!target.constructor.prototype) {
-                throw new Error(`BUG: Should not hit this`);
-            }
-            // This is an instance
-            target = target.constructor.prototype;
-        }
-    }
-
+    
     try {
-        return Reflect.getMetadata('rpc:type', target, propertyKey) || 'none';
+        return Reflect.getMetadata('rpc:type', target, propertyKey) 
+            ?? Reflect.getMetadata('rpc:type', target.constructor.prototype, propertyKey)
+            ?? 'none'
+        ;
     } catch (e) {
         debugger;
         throw e;
