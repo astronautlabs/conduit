@@ -39,7 +39,7 @@ export class Service {
      * The connection will be established and re-established automatically, the returned service
      * proxy is immediately available for use. Requests to the proxy will be automatically delayed 
      * while the connection is established and the service object is obtained from the remote endpoint.
-     * @param socketUrl The URL of the WebSocket server which supports WebRPC.
+     * @param socketUrl The URL of the WebSocket server which supports Conduit.
      */
     static proxy<T extends object>(this: AnyConstructor<T>): Proxied<T>;
 
@@ -48,7 +48,7 @@ export class Service {
      * The connection will be established and re-established automatically, the returned service
      * proxy is immediately available for use. Requests to the proxy will be automatically delayed 
      * while the connection is established and the service object is obtained from the remote endpoint.
-     * @param socketUrl The URL of the WebSocket server which supports WebRPC.
+     * @param socketUrl The URL of the WebSocket server which supports Conduit.
      */
     static proxy<T extends object>(this: AnyConstructor<T>, socketUrl: string): Proxied<T>;
     

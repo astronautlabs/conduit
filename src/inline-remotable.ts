@@ -19,7 +19,7 @@ export function inlineRemotable<T>(object: T): T {
 }
 
 /**
- * Instruct webrpc to allow all method calls and event subscriptions on 
+ * Instruct Conduit to allow all method calls and event subscriptions on 
  * the given object. This is useful when creating custom proxies, as well 
  * as when passing an object from one RPC session to another (ie relaying).
  * @param object 

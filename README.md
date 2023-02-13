@@ -1,33 +1,31 @@
-# @/webrpc
+# @/conduit
 
 > 🚧 **Work In Progress**  
 > This library is in an alpha state. It is not yet ready for production use.
 
-> 📺 Part of the [**Astronaut Labs Broadcast Suite**](https://github.com/astronautlabs/broadcast)
-
-[![NPM](https://img.shields.io/npm/v/@astronautlabs/webrpc.svg)](https://www.npmjs.com/package/@astronautlabs/webrpc) [![Build Status](https://circleci.com/gh/astronautlabs/webrpc/tree/main.svg?style=shield)](https://circleci.com/gh/astronautlabs/webrpc)
+[![NPM](https://img.shields.io/npm/v/@astronautlabs/conduit.svg)](https://www.npmjs.com/package/@astronautlabs/conduit) [![Build Status](https://circleci.com/gh/astronautlabs/conduit/tree/main.svg?style=shield)](https://circleci.com/gh/astronautlabs/conduit)
 
 A powerful way to do RPC on the web.
 
 ```ts
-import * as webrpc from '@astronautlabs/webrpc';
+import * as conduit from '@astronautlabs/conduit';
 
-let [channelA, channelB] = webrpc.LocalChannel.makePair();
+let [channelA, channelB] = conduit.LocalChannel.makePair();
 
-@webrpc.Name('com.example.randomNumber')
+@conduit.Name('com.example.randomNumber')
 class MyService {
-    @webrpc.Method()
+    @conduit.Method()
     getRandomNumber() {
         return Math.random();
     }
 }
 
-let sessionA = new webrpc.RPCSession(channelA);
+let sessionA = new conduit.RPCSession(channelA);
 sessionA.registerService(MyService);
 
 // ---
 
-let sessionB = new webrpc.RPCSession(channelB);
+let sessionB = new conduit.RPCSession(channelB);
 let remoteObject = await session.getRemoteService(MyService);
 
 let number = await remoteObject.getRandomNumber();
@@ -36,38 +34,38 @@ console.log(number);
 
 # Object References
 
-You aren't limited to singleton services with `@/webrpc`
+You aren't limited to singleton services with `@/conduit`
 
 ```typescript
-import * as webrpc from '@astronautlabs/webrpc';
+import * as conduit from '@astronautlabs/conduit';
 
-let [channelA, channelB] = webrpc.LocalChannel.makePair();
+let [channelA, channelB] = conduit.LocalChannel.makePair();
 
-@webrpc.Name('com.example.randomNumber')
+@conduit.Name('com.example.randomNumber')
 class MyService {
-    @webrpc.Method()
+    @conduit.Method()
     getRandomGenerator(min: number, max: number) {
         return new RandomGenerator(min, max);
     }
 }
 
-@webrpc.Remotable()
+@conduit.Remotable()
 class RandomGenerator {
     constructor(readonly min: number, max: number) {
     }
 
-    @webrpc.Method()
+    @conduit.Method()
     random() {
         return min + Math.random() * (max - min) | 0;
     }
 }
 
-let sessionA = new webrpc.RPCSession(channelA);
+let sessionA = new conduit.RPCSession(channelA);
 sessionA.registerService(MyService);
 
 // ---
 
-let sessionB = new webrpc.RPCSession(channelB);
+let sessionB = new conduit.RPCSession(channelB);
 let remoteObject = await session.getRemoteService(MyService);
 
 let generator = await remoteObject.getRandomGenerator(4, 8);
@@ -80,11 +78,11 @@ console.log(await generator.random()); // 5
 # Events
 
 ```typescript
-import * as webrpc from '@astronautlabs/webrpc';
+import * as conduit from '@astronautlabs/conduit';
 
-let [channelA, channelB] = webrpc.LocalChannel.makePair();
+let [channelA, channelB] = conduit.LocalChannel.makePair();
 
-@webrpc.Name('com.example.randomNumber')
+@conduit.Name('com.example.randomNumber')
 class MyService {
     constructor() {
         setTimeout(() => this._timer.next(), 1000);
@@ -102,7 +100,7 @@ sessionA.registerService(MyService);
 
 // ---
 
-let sessionB = new webrpc.RPCSession(channelB);
+let sessionB = new conduit.RPCSession(channelB);
 let remoteObject = await session.getRemoteService(MyService);
 
 let subscription = await remoteObject.timer.subscribe(() => console.log(`tick`));
@@ -117,7 +115,7 @@ setTimeout(async () => await subscription.unsubscribe(), 5*1000);
 
 # Wire Format
 
-`@/webrpc` encodes messages in JSON, making it ideal for use on the web. 
+`@/conduit` encodes messages in JSON, making it ideal for use on the web. 
 
 # Channels
 
