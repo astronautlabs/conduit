@@ -4,6 +4,10 @@ import { Proxied } from "./proxied";
 import { Remotable } from "./remotable";
 import { RPCSession } from "./session";
 
+/**
+ * Provides a proxy for a remote object for which a reference is held by the local Conduit session.
+ * This allows seamless async RPC calls and event (observable) subscriptions. 
+ */
 @Remotable()
 export class RPCProxy {
     private constructor(id: string, referenceId: string) {
@@ -14,7 +18,15 @@ export class RPCProxy {
     [OBJECT_ID]?: string;
     [REFERENCE_ID]?: string;
 
-
+    /**
+     * Construct a new proxy for the given object reference, which is held by the given Conduit session.
+     * Any method calls to this proxy will be sent as Conduit method calls over the given session.
+     * 
+     * @param session The session which owns the remote reference
+     * @param objectId The unique ID of the remote object
+     * @param referenceId The ID of the object reference that this remote object will hold.
+     * @returns 
+     */
     static create<T = any>(session: RPCSession, objectId: string, referenceId: string): Proxied<T> {
         const methodMap = new Map<string, Function>();
 

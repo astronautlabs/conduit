@@ -37,6 +37,11 @@ export interface InFlightRequest {
 
 export type ServiceFactory<T = any> = (session: RPCSession) => T;
 
+/**
+ * Handles message passing, dispatch, resource management and other concerns for Conduit RPC sessions. Creating a 
+ * Session with a given communication channel will enable full remote procedure call functionality on that channel 
+ * without any further machination required. 
+ */
 @Name(`org.webrpc.session`)
 @Remotable()
 export class RPCSession {
@@ -307,6 +312,10 @@ export class RPCSession {
      */
     private proxyRegistry = new Map<string, WeakRef<any>>();
     
+    /**
+     * Used to track the lifetimes of remote object proxies for the purpose of releasing the corresponding remote object
+     * (once all references have been finalized).
+     */
     private proxyFinalizer = new FinalizationRegistry((id: string) => {
         console.log(`Finalizing proxy ${id}`);
         this.proxyRegistry.delete(id);
@@ -316,6 +325,11 @@ export class RPCSession {
         }, this.finalizationDelay);
     });
 
+    /**
+     * Determine how many local references are held to the remote object identified by `id`.
+     * @param id 
+     * @returns 
+     */
     countReferencesForObject(id: string) {
         let count = Array.from(this.remoteRefRegistry.keys()).filter(x => x.startsWith(`${id}.`)).length
         this.log(`Counted ${count} references to ${id}. Reference list:`);
@@ -332,11 +346,23 @@ export class RPCSession {
      */
     finalizationDelay = 1000;
 
+    /**
+     * Register the given proxy in the proxy and finalizer registries. This is rquired to ensure 
+     * we can identify the proxy by ID later, and that we are properly tracking when the finalization
+     * of the given object occurs, so we can notify the remote side.
+     * @param object 
+     */
     private registerProxy(object: RPCProxy) {
         this.proxyRegistry.set(object[OBJECT_ID], new WeakRef(object));
         this.proxyFinalizer.register(object, `${object[OBJECT_ID]}.${object[REFERENCE_ID]}`);
     }
 
+    /**
+     * Register a local object with the given ID (or one will be generated). This is required before 
+     * sending references to the local object to the remote side.
+     * @param object 
+     * @param id 
+     */
     private registerLocalObject(object: any, id?: string) {
         id ??= object[OBJECT_ID] ?? uuid();
         object[OBJECT_ID] = id;
@@ -346,7 +372,13 @@ export class RPCSession {
 
     /**
      * Returns a RemoteRef for the given object. The object can be a Remotable object
-     * or an RPCProxy object (representing an object remoted from the other side).
+     * or an RPCProxy object (representing an object remoted from the other side). 
+     * - If the object is local and remotable, a new reference will be created for the object, 
+     *   which MUST be freed later (usually by the remote side). A new reference is *always*
+     *   created in this case.
+     * - If the object is a remote proxy, we make sure we have registered the proxy, and return
+     *   an unallocated reference to the proxy. This is useful for the remote side to identify 
+     *   and reassociate the objects it has sent us, when we send that object back to them.
      * @param object 
      * @returns 
      */
@@ -434,10 +466,27 @@ export class RPCSession {
             console.dir(obj);
     }
 
+    /**
+     * Resolve the given ID to a local object, if a local object with that ID exists.
+     * @param id 
+     * @returns The object if it was registered and not yet garbage collected.
+     */
     getLocalObjectById(id: string) {
         return this.localObjectRegistry.get(id)?.deref();
     }
 
+    /**
+     * Register a new service on this session. 
+     * 
+     * When the remote side requests an instance of the service, the factory is called to create the instance. The 
+     * factory is passed the Session which is trying to create it, so that an instance of the service can be localized
+     * per session, globally, or per call. 
+     * 
+     * @param klass The class implementing the service
+     * @param factory A factory function which can create an instance of the given service. If no factory is provided, 
+     *                a default factory is created which constructs the class with default parameters (this means each
+     *                session will have a separate instance of the service class).
+     */
     registerService(klass: Constructor, factory?: ServiceFactory) {
         factory ??= () => new klass();
 
@@ -466,6 +515,10 @@ export class RPCSession {
     }
 
     /**
+     * Obtain an instance of the given service, by it's identity.  If the service has already been constructed, the 
+     * existing instance is used. Otherwise, the factory associated with the service registration will be called,
+     * the new instance will be registered, and then returned.
+     * 
      * @internal
      */
     @Method()
@@ -488,6 +541,11 @@ export class RPCSession {
         return serviceObject;
     }
 
+    /**
+     * Get the Conduit ID of the given object, if one has been assigned.
+     * @param object Any object- can be a local object or a remote proxy object.
+     * @returns 
+     */
     getObjectId(object) {
         return object[OBJECT_ID];
     }
@@ -499,6 +557,11 @@ export class RPCSession {
         return `${object[OBJECT_ID]}.${object[REFERENCE_ID]}`;
     }
 
+    /**
+     * Returns true if a local object with the given ID is (1) registered and (2) not garbage collected.
+     * @param id 
+     * @returns 
+     */
     isLocalObjectPresent(id: string) {
         this.log(`isLocalObjectPresent(): Checking for ${id}...`);
         let weakRef = this.localObjectRegistry.get(id);
@@ -527,8 +590,24 @@ export class RPCSession {
             this._becameIdle.next();
     }
 
+    /**
+     * Subscribe to an event (named `eventName`) on the given object (`eventSource`). This method is typically called 
+     * over Conduit by the remote side. It is not intended to be used on a local (non-proxied) instance of RPCSession.
+     * 
+     * Constraints:
+     * - The given `eventSource` must be remote from the caller's perspective (local from the perspective of the implementation).
+     * - The given `eventReceiver` must be local from the caller's perspective (remote from the perspective of the implementation).
+     * 
+     * The `eventSource` object should have an `eventName` property which contains an `Observable`. That observable will
+     * be subscribed to, and the resulting emitted values will be passed to `eventReceiver` via it's `next()` method.
+     * 
+     * @param eventSource 
+     * @param eventName 
+     * @param eventReceiver 
+     * @returns 
+     */
     @Method()
-    async subscribeToEvent<T>(eventSource: any, eventName: string, eventReceiver: any) {
+    async subscribeToEvent<T>(eventSource: any, eventName: string, eventReceiver: { next(value: T): void }) {
         if (!eventSource)
             throw new TypeError(`eventSource cannot be null/undefined`);
         
