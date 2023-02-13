@@ -84,5 +84,3 @@ export class Service {
         );
     }
 }
-
-abstract class A extends Service { }
