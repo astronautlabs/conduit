@@ -30,6 +30,9 @@ export interface RPCChannel {
     close?();
 }
 
+/**
+ * A channel which operates within the local process.
+ */
 export class LocalChannel implements RPCChannel {
     private _received = new Subject<string>();
     get received() { return this._received.asObservable(); }
@@ -51,6 +54,9 @@ export class LocalChannel implements RPCChannel {
     }
 }
 
+/**
+ * A channel that operates over a WebSocket or RTCDataChannel.
+ */
 export class SocketChannel implements RPCChannel {
     constructor(readonly socket: WebSocket | RTCDataChannel) {
         if (socket.readyState === WebSocket.OPEN) {
@@ -96,6 +102,9 @@ export class SocketChannel implements RPCChannel {
     }
 }
 
+/**
+ * A channel that operates on a DurableSocket.
+ */
 export class DurableSocketChannel extends SocketChannel {
     constructor(socket: DurableSocket) {
         super(socket);
@@ -106,6 +115,9 @@ export class DurableSocketChannel extends SocketChannel {
     readonly socket: DurableSocket;
 }
 
+/**
+ * A channel that operates via window-to-window (or frame-to-frame) postMessage.
+ */
 export class WindowChannel implements RPCChannel {
     constructor(private remoteWindow: Window, origin?: string) {
         window.addEventListener('message', this.handler = ev => {
