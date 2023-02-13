@@ -115,7 +115,9 @@ setTimeout(async () => await subscription.unsubscribe(), 5*1000);
 
 # Wire Format
 
-`@/conduit` encodes messages in JSON, making it ideal for use on the web. Each message has a type, identified by the `type` field. There are four types of message:
+`@/conduit` encodes messages in JSON, making it ideal for use on the web. Each message has a type, identified by the 
+`type` field. There are four types of message:
+
 - `request` -- Request a specific method to be called on a given object, with the given function parameters.
 - `response` -- Indicate that a method call has completed
 - `ping` -- Check if the connection is still working
@@ -153,16 +155,21 @@ This type of method is sent whenever a remote procedure call is initiated.
 }
 ```
 
-A successful response will have `error` be null/undefined. A failure response will have `error` be anything other than null or undefined. 
-- Upon receiving a successful response, Conduit will resolve the promise corresponding to the method call with the given `value`. 
-- Upon receiving a failure response, Conduit will reject the promise correspondsing to the method call with the given `error`.
+A successful response will have `error` be null/undefined. A failure response will have `error` be anything other than 
+null or undefined. 
+- Upon receiving a successful response, Conduit will resolve the promise corresponding to the method call with the 
+  given `value`. 
+- Upon receiving a failure response, Conduit will reject the promise correspondsing to the method call with the given 
+  `error`.
 
 ## `ping`
 ```json
 { "type": "ping" }
 ```
 
-Can be sent to ensure that message passing is still working over the given channel. Not sent by Conduit by default, see the included `DurableSocket` and `DurableSocketChannel` types for more information. When a Conduit session receives this message, it always responds with a corresponding `pong` message (see below).
+Can be sent to ensure that message passing is still working over the given channel. Not sent by Conduit by default, see 
+the included `DurableSocket` and `DurableSocketChannel` types for more information. When a Conduit session receives 
+this message, it always responds with a corresponding `pong` message (see below).
 
 ## `pong`
 ```json
@@ -171,9 +178,11 @@ Can be sent to ensure that message passing is still working over the given chann
 
 ## References
 
-Conduit supports the ability to refer to remote objects (and local remotable objects) within the request/response messages that make up RPC calls.
+Conduit supports the ability to refer to remote objects (and local remotable objects) within the request/response 
+messages that make up RPC calls.
 
-In fact, this capability is fundamental to how the mechanism works. Every RPC call specifies what object a method is being called on as the `receiver` object. The receiver is specified using a Reference.
+In fact, this capability is fundamental to how the mechanism works. Every RPC call specifies what object a method is 
+being called on as the `receiver` object. The receiver is specified using a Reference.
 
 ```json
 { 
@@ -184,28 +193,47 @@ In fact, this capability is fundamental to how the mechanism works. Every RPC ca
 ```
 
 - `Rε`: The ID of the object
-- `S`: The "side" that owns this object from the perspective of the sender of the reference object (`L` for "local to sender", `R` for "remote to sender"). Since both sides have local and remote sides and these references are interchanged, the context of where the reference was sent from is important for determining it's meaning. For instance if a message is received which indicates "local side", then this means it is "local to the sender" and "remote to the receiver". If a message is *sent* which indicates remote side, then this means it is "remote to the sender" and "local to the receiver".
+- `S`: The "side" that owns this object from the perspective of the sender of the reference object (`L` for "local to 
+  sender", `R` for "remote to sender"). Since both sides have local and remote sides and these references are 
+  interchanged, the context of where the reference was sent from is important for determining it's meaning. For 
+  instance if a message is received which indicates "local side", then this means it is "local to the sender" and 
+  "remote to the receiver". If a message is *sent* which indicates remote side, then this means it is "remote to the 
+  sender" and "local to the receiver".
 - `Rid`: The ID of the reference itself. This is used for properly implementing remote garbage collection (see below).
-  Some well-known references do not support multi-referencing, in those cases this field will be omitted or empty (see below).
+  Some well-known references do not support multi-referencing, in those cases this field will be omitted or empty (see 
+  below).
 
 ## Garbage Collection
 
-References to remote objects intelligently handle garbage collection. References on the remote side keep the objects they refer to on the local side alive (they won't be garbage collected). When remote references are discarded and get garbage collected, references on the server side are automatically discarded to allow objects to be garbage collected.
+References to remote objects intelligently handle garbage collection. References on the remote side keep the objects 
+they refer to on the local side alive (they won't be garbage collected). When remote references are discarded and get 
+garbage collected, references on the server side are automatically discarded to allow objects to be garbage collected.
 
-Every object reference sent within a Conduit message represents a unique reference to a specific object. While each of those unique references are outstanding, the sender must not allow the referenced objects to be garbage collected. Each one of those references must be finalized by the receiver before the referenced object may be collected. 
+Every object reference sent within a Conduit message represents a unique reference to a specific object. While each of 
+those unique references are outstanding, the sender must not allow the referenced objects to be garbage collected. Each 
+one of those references must be finalized by the receiver before the referenced object may be collected. 
 
-Since Conduit only keeps one proxy per remote object, most of the references created to a given object will be immediately dismissed. As soon as Conduit resolves the references to an already existing proxy object, it will no longer need the new reference. However if no proxy exists yet, the reference will *not* be finalized.
+Since Conduit only keeps one proxy per remote object, most of the references created to a given object will be 
+immediately dismissed. As soon as Conduit resolves the references to an already existing proxy object, it will no 
+longer need the new reference. However if no proxy exists yet, the reference will *not* be finalized.
 
 ## Well-Known References
 
-If you've read all the above and you now understand that _every_ `request` must specify a valid object reference, you might be wondering how an initial `request` would be possible since there are no other calls which might be used to tell you how to populate the `receiver` references. You might also wonder how references are finalized for the purposes of garbage collection.
+If you've read all the above and you now understand that _every_ `request` must specify a valid object reference, you 
+might be wondering how an initial `request` would be possible since there are no other calls which might be used to 
+tell you how to populate the `receiver` references. You might also wonder how references are finalized for the purposes 
+of garbage collection.
 
-All of the base machinery that enables this functionality is provided by the `RPCSession` class itself, _which is itself a remotable Conduit object_. There is always exactly 1 `RPCSession` object on each end of an RPC session (makes sense), and it is referred to with a special kind of reference called a "well known reference".
+All of the base machinery that enables this functionality is provided by the `RPCSession` class itself, _which is 
+itself a remotable Conduit object_. There is always exactly 1 `RPCSession` object on each end of an RPC session (makes 
+sense), and it is referred to with a special kind of reference called a "well known reference".
 
-Well known references are those where instead of a UUID, the object being referred to has a well-known ID which can be predicted by the other side of the conversation. The ID of the `RPCSession` object is always `org.webrpc.session`, so it is always possible to refer to this object even before any messages have been sent. Furthermore, the `RPCSession`'s lifespan is always at least
-as long as the lifetime of the channel which it services, which means there is no need to manage references for it.
-Because of these factors, we can create the following reference for the remote's RPCSession insrtance without knowing 
-anything about the object iself, the channel, etc.
+Well known references are those where instead of a UUID, the object being referred to has a well-known ID which can be 
+predicted by the other side of the conversation. The ID of the `RPCSession` object is always `org.webrpc.session`, so 
+it is always possible to refer to this object even before any messages have been sent. Furthermore, the `RPCSession`'s 
+lifespan is always at least as long as the lifetime of the channel which it services, which means there is no need to 
+manage references for it. Because of these factors, we can create the following reference for the remote's RPCSession 
+instance without knowing anything about the object iself, the channel, etc.
 
 ```json
 { "Rε": "org.webrpc.session", "S": "R" }
@@ -228,7 +256,8 @@ Since RPC over WebSockets is so common, it is made especially convenient:
 let session = await RPCSession.connect(`wss://example.com/my/socket`);
 ```
 
-When the promise returned by `connect()` resolves the connection is fully established and ready for communication. If a connection error occurs, the promise will reject.
+When the promise returned by `connect()` resolves the connection is fully established and ready for communication. If a 
+connection error occurs, the promise will reject.
 
 ---
 
@@ -245,15 +274,16 @@ export interface RPCChannel {
 # Services
 
 The primary purpose of Conduit is to expose service objects with well-known identities which have well-known interfaces.
-From a developer experience perspective, you need only use `registerService` and `getRemoteService()` to register service 
-classes of your own and consume services of the remote service you are talking to. Remember that Conduit is bidirectional,
-and services can be registered on either side. It is totally possible (and sometimes desirable) for a WebSocket *client* 
-to register a named service, and for the WebSocket *server* to acquire an instance of that service and call RPC methods 
-on it.
+From a developer experience perspective, you need only use `registerService` and `getRemoteService()` to register 
+service classes of your own and consume methods of the remote service you are talking to. Remember that Conduit is 
+bidirectional, and services can be registered on either side. It is totally possible (and sometimes desirable) for a 
+WebSocket *client* to register a named service, and for the WebSocket *server* to acquire an instance of that service 
+and call RPC methods on it.
 
-For those interested in the mechanics of how this works, the local `RPCSession` implements `async getRemoteService(serviceName)` 
-as `await this.remote.getLocalService(serviceName)`, where `this.remote` is the RPC proxy of the remote `RPCSession`. So
-there is no special mechanics for service discovery, these are just well known RPC calls of the `RPCSession` class.
+For those interested in the mechanics of how this works, the local `RPCSession` implements 
+`async getRemoteService(serviceName)` as `await this.remote.getLocalService(serviceName)`, where `this.remote` is the 
+RPC proxy of the remote `RPCSession`. So there is no special mechanics for service discovery, these are just well known 
+RPC calls of the `RPCSession` class.
 
 # Service Factories
 
@@ -269,7 +299,8 @@ context of Conduit over Websockets). Control of the lifecycle of service objects
 session.registerService(MyService, () => myServiceInstance); // where myServiceInstance is not specific to this session
 ```
 
-Service factories are passed a single argument, the `RPCSession` that is responsible for creating them. This allows you easy access to the related session if you need it.
+Service factories are passed a single argument, the `RPCSession` that is responsible for creating them. This allows you 
+easy access to the related session if you need it.
 
 ```typescript
 session.registerService(MyService, session => new MyService(session));
@@ -277,12 +308,11 @@ session.registerService(MyService, session => new MyService(session));
 
 Since service factories are just functions, you could use this to add dependency injection.
 
-# Services without registration
+# Services without registration, and other low-level customization
 
-If you wish to dynamically create services with arbitrary logic, you can subclass `RPCSession`
+If you wish to dynamically create services with arbitrary logic, you can subclass `RPCSession`. 
 
 ```typescript
-
 class MySession extends RPCSession {
     @Method()
     override getLocalService(identity: string) {
@@ -291,3 +321,7 @@ class MySession extends RPCSession {
     }
 }
 ```
+
+This can be used to modify any part of the base APIs, or even add new top-level APIs. It is also how one might use 
+well-known references within an application, since the default implementation of `RPCSession` does not provide any 
+mechanism for using well-known references (other than the `RPCSession` well known reference).
