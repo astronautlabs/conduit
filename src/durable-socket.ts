@@ -24,7 +24,7 @@ import { DurableSocketChannel } from "./channel";
             this.addEventListener('open', () => resolve(this));
             this.addEventListener('close', e => {
                 if (e.code === 503) {
-                    console.error(`Failed to connect to chat service!`);
+                    //console.error(`Failed to connect to service!`);
                     reject(e);
                 }
             });
@@ -90,7 +90,6 @@ import { DurableSocketChannel } from "./channel";
         this._messageQueue.splice(0).forEach(m => this._socket.send(m));
 
         if (!first) {
-            console.log(`[Socket] Connection Restored [${this.url}]`);
             this.dispatchEvent({
                 type: 'restore', 
                 bubbles: false, 
@@ -127,17 +126,16 @@ import { DurableSocketChannel } from "./channel";
             try {
                 this.send(JSON.stringify({ type: 'ping' }));
             } catch (e) {
-                console.error(`[Socket] Failed to send ping message. Assuming connection is broken. [${this.url}]`);
+                //console.error(`[Socket] Failed to send ping message. Assuming connection is broken. [${this.url}]`);
                 try {
                     this._socket?.close();
                 } catch (e) {
-                    console.error(`[Socket] Failed to close socket after ping failure: ${e.message} [${this.url}]`);
+                    //console.error(`[Socket] Failed to close socket after ping failure: ${e.message} [${this.url}]`);
                 }
                 return;
             }
 
             if (this.lastPong < Date.now() - this.pingKeepAliveInterval) {
-                console.log(`[Socket] No keep-alive response in ${this.pingKeepAliveInterval}ms. Forcing reconnect... [${this.url}]`);
                 try {
                     this.handleLost();
                 } catch (e) {
@@ -167,9 +165,10 @@ import { DurableSocketChannel } from "./channel";
         if (this._closed)
             return;
         
-        if (this._ready) {
-            console.log(`[Socket] Connection Lost [${this.url}]`);
-        }
+        // if (this._ready) {
+        //     console.log(`[Socket] Connection Lost [${this.url}]`);
+        // }
+        
         this._ready = false;
         this._attempt += 1;
 
@@ -222,7 +221,7 @@ import { DurableSocketChannel } from "./channel";
     }
 
     private reconnect() {
-        console.log(`[Socket] Waiting ${this.actualReconnectTime}ms before reconnect (attempt ${this._attempt}) [${this.url}]`);
+        //console.log(`[Socket] Waiting ${this.actualReconnectTime}ms before reconnect (attempt ${this._attempt}) [${this.url}]`);
         setTimeout(() => this.connect(), this.actualReconnectTime);
     }
 
