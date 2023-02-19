@@ -49,7 +49,17 @@ export class RPCSession {
         this._remote = RPCProxy.create<RPCSession>(this, getRpcServiceName(RPCSession), '');
         this.registerService(RPCSession, () => this);
         this.registerLocalObject(this, getRpcServiceName(RPCSession));
-        channel.received.subscribe(data => this.onReceiveMessage(this.decodeMessage(data)));
+        channel.received.subscribe(data => {
+            let message: Message;
+            try {
+                message = this.decodeMessage(data);
+            } catch (e) {
+                channel.close?.();
+                return;
+            }
+
+            this.onReceiveMessage(message)
+        });
         channel.stateLost?.subscribe(() => {
             Array.from(this._requestMap.values()).forEach(req => {
                 req.error = new Error(`The channel state was lost.`)
