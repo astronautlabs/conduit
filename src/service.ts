@@ -97,8 +97,6 @@ export class Service {
             );
         }
         
-        new Promise<RPCChannel>(async (resolve, _) => resolve(new SocketChannel(
-            await new DurableSocket(endpoint).waitUntilReady()))
-        )
+        return channel;
     }
 }
