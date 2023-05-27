@@ -1,7 +1,7 @@
 import { firstValueFrom } from "rxjs";
-import { RPCChannel, SocketChannel } from "./channel";
+import { DurableSocketChannel, RPCChannel, SocketChannel } from "./channel";
 import { DurableSocket } from "./durable-socket";
-import { AnyConstructor, Constructor, getRpcUrl } from "./internal";
+import { AnyConstructor, getRpcUrl } from "./internal";
 import { Proxied } from "./proxied";
 import { Remotable } from "./remotable";
 import { RPCSession } from "./session";
@@ -70,18 +70,35 @@ export class Service {
      * @param channel The channel to connect to
      */
     static proxy<T extends object>(this: AnyConstructor<T>, channel: RPCChannel): Proxied<T>;
-    static proxy<T extends object>(this: AnyConstructor<T>, channel?: string | Promise<RPCChannel> | RPCChannel): Proxied<T> {
-        channel ??= getRpcUrl(this);
+    static proxy<T extends object>(this: AnyConstructor<T>, channelOrEndpoint?: string | Promise<RPCChannel> | RPCChannel): Proxied<T> {
+        channelOrEndpoint ??= getRpcUrl(this);
         
-        return immediateServiceProxy<T>(
-            (typeof channel === 'string'
-                ? new Promise<RPCChannel>(async (resolve, _) => resolve(new SocketChannel(
-                    await new DurableSocket(channel as string).waitUntilReady()))
-                )
-                : Promise.resolve(channel)
-            )
-            .then(channel => new RPCSession(channel)), 
-            this
-        );
+        let channelPromise: Promise<RPCChannel>;
+
+        if (typeof channelOrEndpoint === 'string') {
+            let endpointChannel = Service.channelForEndpoint(channelOrEndpoint);
+            channelPromise = endpointChannel.socket.waitUntilReady().then(() => endpointChannel);
+        } else {
+            channelPromise = Promise.resolve(channelOrEndpoint);
+        }
+
+        return immediateServiceProxy<T>(channelPromise.then(channel => new RPCSession(channel)), this);
+    }
+
+    private static endpointChannels = new Map<string, WeakRef<DurableSocketChannel>>();
+    private static channelForEndpoint(endpoint: string) {
+        let channel = this.endpointChannels.get(endpoint)?.deref();
+        if (channel) {
+            return channel;
+        } else {
+            this.endpointChannels.set(
+                endpoint, 
+                new WeakRef(channel = new DurableSocketChannel(new DurableSocket(endpoint)))
+            );
+        }
+        
+        new Promise<RPCChannel>(async (resolve, _) => resolve(new SocketChannel(
+            await new DurableSocket(endpoint).waitUntilReady()))
+        )
     }
 }
