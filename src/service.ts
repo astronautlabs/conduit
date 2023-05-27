@@ -1,3 +1,4 @@
+import { firstValueFrom } from "rxjs";
 import { RPCChannel, SocketChannel } from "./channel";
 import { DurableSocket } from "./durable-socket";
 import { AnyConstructor, Constructor, getRpcUrl } from "./internal";
@@ -15,7 +16,7 @@ function immediateServiceProxy<T extends object>(promise: Promise<RPCSession>, k
 
     return asyncProxy<Proxied<T>>(async () => {
         let session = await promise;
-        await session.channel.ready.toPromise();
+        await firstValueFrom(session.channel.ready);
         return delegate ??= session.getRemoteService(klass);
     });
 }

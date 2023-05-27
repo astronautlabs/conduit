@@ -1,4 +1,4 @@
-import { Observable, Subject } from "rxjs";
+import { Observable, Subject, firstValueFrom } from "rxjs";
 import { take } from "rxjs/operators";
 import { DurableSocket } from "./durable-socket";
 import { ResettableReplaySubject } from "./resettable-subject";
@@ -93,7 +93,7 @@ export class SocketChannel implements RPCChannel {
     }
 
     async send(message: any) {
-        await this.ready.pipe(take(1)).toPromise();
+        await firstValueFrom(this.ready);
         this.socket.send(message)
     }
 
