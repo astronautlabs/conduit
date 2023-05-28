@@ -82,7 +82,18 @@ export class Service {
             channelPromise = Promise.resolve(channelOrEndpoint);
         }
 
-        return immediateServiceProxy<T>(channelPromise.then(channel => new RPCSession(channel)), this);
+        return immediateServiceProxy<T>(channelPromise.then(channel => Service.sessionForChannel(channel)), this);
+    }
+
+    private static channelSessions = new WeakMap<RPCChannel, RPCSession>();
+    private static sessionForChannel(channel: RPCChannel) {
+        if (this.channelSessions.has(channel))
+            return this.channelSessions.get(channel);
+
+        const session = new RPCSession(channel);
+        this.channelSessions.set(channel, session);
+
+        return session;
     }
 
     private static endpointChannels = new Map<string, WeakRef<DurableSocketChannel>>();
