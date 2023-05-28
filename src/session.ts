@@ -67,6 +67,22 @@ export class RPCSession {
         });
     }
 
+    private waitChain = Promise.resolve();
+    
+    /**
+     * Delay further requests on this session until the promise returned by the given function returns.
+     * The callback will not execute until previous locks have been completed.
+     * Returns a promise which resolves after all previous locks (and the one created with the given callback) 
+     * have been completed.
+     * @param callback 
+     */
+    async lock(callback: () => Promise<void>) {
+        await this.waitChain;
+        const promise = callback();
+        this.waitChain = this.waitChain.then(() => promise);
+        await promise;
+    }
+
     /**
      * Connect via WebSocket to the given URL and create a new RPCSession using 
      * the socket as the underlying channel.
@@ -117,6 +133,8 @@ export class RPCSession {
         if (!(receiver instanceof RPCProxy))
             throw new Error(`Cannot RPC to local object of type '${receiver.constructor.name}'`);
 
+        await this.waitChain;
+        
         this.log(`Call: [${receiver.constructor.name}/${receiver[OBJECT_ID]}].${method}()`);
 
         let rpcRequest = <Request>{
