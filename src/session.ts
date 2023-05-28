@@ -80,7 +80,7 @@ export class RPCSession {
      * Returns a promise which resolves after all previous locks (and the one created with the given callback) 
      * have been completed
      */
-    async lock<T>(callback: () => T): T {
+    async lock<T>(callback: () => T): Promise<T> {
         await this.waitChain;
 
         let returnValue: T;
@@ -92,8 +92,8 @@ export class RPCSession {
         }
 
         this.waitChain = this.waitChain.then(() => Promise.resolve(returnValue).then(() => {}));
-
-        await returnValue;
+        
+        return await returnValue;
     }
 
     private _ignoreLocksSync = false;
