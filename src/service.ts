@@ -86,7 +86,14 @@ export class Service {
     }
 
     private static channelSessions = new WeakMap<RPCChannel, RPCSession>();
-    private static sessionForChannel(channel: RPCChannel) {
+
+    /**
+     * Acquire the RPCSession object associated with the given channel. This will be the same session used 
+     * by Service.proxy() when used in concert with the given channel.
+     * @param channel 
+     * @returns 
+     */
+    static sessionForChannel(channel: RPCChannel) {
         if (this.channelSessions.has(channel))
             return this.channelSessions.get(channel);
 
@@ -97,7 +104,14 @@ export class Service {
     }
 
     private static endpointChannels = new Map<string, WeakRef<DurableSocketChannel>>();
-    private static channelForEndpoint(endpoint: string) {
+    
+    /**
+     * Get or create the RPCChannel object associated with the given endpoint URL. This will be the same channel
+     * used by Service.proxy() when used in concert with the given endpoint URL.
+     * @param channel 
+     * @returns 
+     */
+    static channelForEndpoint(endpoint: string) {
         let channel = this.endpointChannels.get(endpoint)?.deref();
         if (channel) {
             return channel;
