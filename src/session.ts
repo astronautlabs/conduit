@@ -71,16 +71,65 @@ export class RPCSession {
     
     /**
      * Delay further requests on this session until the promise returned by the given function returns.
-     * The callback will not execute until previous locks have been completed.
+     * The callback will not execute until previous locks have been completed. 
+     * - When Zone.js is available, RPC calls made within the execution context of the callback will be automatically 
+     *   *not* delayed by this lock or any others. 
+     * - If Zone.js is not available, it is important that you use ignoreLocks() to perform RPC calls when done from an
+     *   async completion handler. You do not need to use ignoreLocks() if your callback is synchronous. 
+     * 
      * Returns a promise which resolves after all previous locks (and the one created with the given callback) 
-     * have been completed.
+     * have been completed
+     */
+    async lock<T>(callback: () => T): T {
+        await this.waitChain;
+
+        let returnValue: T;
+
+        if (typeof Zone !== 'undefined') {
+            returnValue = this.ignoreLocksAsync(() => callback());
+        } else {
+            returnValue = this.ignoreLocks(() => callback());
+        }
+
+        this.waitChain = this.waitChain.then(() => Promise.resolve(returnValue).then(() => {}));
+
+        await returnValue;
+    }
+
+    private _ignoreLocksSync = false;
+
+    /**
+     * Ignore the outstanding locks during the (synchronous) execution of the given callback. IMPORTANT: This property
+     * does not extend to asynchronous operations performed by this function. If you need that, you need to load Zone.js
+     * and use ignoreLocksAsync().
      * @param callback 
      */
-    async lock(callback: () => Promise<void>) {
-        await this.waitChain;
-        const promise = callback();
-        this.waitChain = this.waitChain.then(() => promise);
-        await promise;
+    ignoreLocks<T>(callback: () => T): T {
+        this._ignoreLocksSync = true;
+        try {
+            return callback();
+        } finally {
+            this._ignoreLocksSync = false;
+        }
+    }
+
+    /**
+     * Ignore the outstanding locks during the (asynchronous) execution of the given callback. This function requires
+     * Zone.js, if you do not have Zone.js loaded, you must instead use ignoreLocks() at the synchronous moment that you 
+     * start an RPC call.
+     * 
+     * @param callback 
+     */
+    ignoreLocksAsync<T>(callback: () => T): T {
+        if (typeof Zone === 'undefined')
+            throw new Error(`Cannot use ignoreLocksAsync() without Zone.js loaded`);
+
+        return Zone.current.fork({
+            name: `RPCSession.lock() zone`,
+            properties: {
+                'conduit:skipRPCLocks': true
+            }
+        }).run(() => callback());
     }
 
     /**
@@ -133,7 +182,13 @@ export class RPCSession {
         if (!(receiver instanceof RPCProxy))
             throw new Error(`Cannot RPC to local object of type '${receiver.constructor.name}'`);
 
-        await this.waitChain;
+        let ignoreLocks = this._ignoreLocksSync;
+        if (!ignoreLocks && typeof Zone !== 'undefined') {
+            ignoreLocks = Zone.current.get('conduit:skipRPCLocks');
+        }
+
+        if (!ignoreLocks)
+            await this.waitChain;
         
         this.log(`Call: [${receiver.constructor.name}/${receiver[OBJECT_ID]}].${method}()`);
 
