@@ -7,22 +7,20 @@ import { Remotable } from "./remotable";
 import { RPCSession } from "./session";
 
 function immediateServiceProxy<T extends object>(promise: Promise<RPCSession>, klass: AnyConstructor<T>): Proxied<T> {
-    let delegate: Promise<Proxied<T>>;
+    let servicePromise: Promise<Proxied<T>>;
 
     promise = promise.then(session => {
-        session.channel.stateLost.subscribe(() => delegate = undefined);
+        session.channel.stateLost.subscribe(() => servicePromise = undefined);
         return session;
     })
 
     return asyncProxy<Proxied<T>>(async () => {
         let session = await promise;
         await firstValueFrom(session.channel.ready);
-        delegate ??= session.getRemoteService(klass);
-
-        if (!delegate)
+        let service = await (servicePromise ??= session.getRemoteService(klass));
+        if (!service)
             throw new Error(`Service.proxy(): No such remote service with ID '${getRpcServiceName(klass)}' (for class ${klass.name})`);
-
-        return delegate;
+        return service;
     });
 }
 
