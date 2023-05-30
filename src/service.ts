@@ -1,7 +1,7 @@
 import { firstValueFrom } from "rxjs";
 import { DurableSocketChannel, RPCChannel, SocketChannel } from "./channel";
 import { DurableSocket } from "./durable-socket";
-import { AnyConstructor, getRpcUrl } from "./internal";
+import { AnyConstructor, getRpcServiceName, getRpcUrl } from "./internal";
 import { Proxied } from "./proxied";
 import { Remotable } from "./remotable";
 import { RPCSession } from "./session";
@@ -17,7 +17,12 @@ function immediateServiceProxy<T extends object>(promise: Promise<RPCSession>, k
     return asyncProxy<Proxied<T>>(async () => {
         let session = await promise;
         await firstValueFrom(session.channel.ready);
-        return delegate ??= session.getRemoteService(klass);
+        delegate ??= session.getRemoteService(klass);
+
+        if (!delegate)
+            throw new Error(`Service.proxy(): No such remote service with ID '${getRpcServiceName(klass)}' (for class ${klass.name})`);
+
+        return delegate;
     });
 }
 
@@ -26,7 +31,14 @@ function asyncProxy<T extends object>(provider: () => Promise<T>) {
     return new Proxy<T>(<any>{}, {
         get(_, p) {
             if (!functionMap.has(p))
-                functionMap.set(p, async (...args) => (await provider())[p](...args));
+                functionMap.set(p, async (...args) => {
+                    const object = await provider();
+                    if (!object) {
+                        throw new Error(`asyncProxy: Provider failed to produce a viable object during call to ${String(p)}()`);
+                    }
+
+                    return object[p](...args);
+                });
 
             return functionMap.get(p);
         }
