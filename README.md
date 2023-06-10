@@ -1,4 +1,4 @@
-# @/conduit
+# ![@/conduit](./logo.svg)
 
 > 🚧 **Work In Progress**  
 > This library is in an alpha state. It is not yet ready for production use.
