@@ -55,3 +55,34 @@ export function getRpcServiceName(target: any): string {
     
     return String(Reflect.getMetadata('rpc:name', target));
 }
+
+/**
+ * @internal
+ * @param target 
+ * @returns 
+ */
+export function getRpcDiscoverable(target: any): boolean {
+    if (typeof Reflect === 'undefined')
+        return undefined;
+    
+    return Boolean(Reflect.getMetadata('rpc:discoverable', target) ?? true);
+}
+
+export function getRpcMethods(target: any): string[] {
+    if (typeof Reflect === 'undefined')
+        return undefined;
+    
+    return Reflect.getMetadata('rpc:methods', target) ?? [];
+}
+
+/**
+ * @internal
+ * @param target 
+ * @returns 
+ */
+export function getRpcIntrospectable(target: any): boolean {
+    if (typeof Reflect === 'undefined')
+        return undefined;
+    
+    return Boolean(Reflect.getMetadata('rpc:introspectable', target) ?? true);
+}

@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { RPCChannel, SocketChannel } from './channel';
 import { DurableSocket } from './durable-socket';
 import { inlineRemotable } from './inline-remotable';
-import { AnyConstructor, Constructor, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
+import { AnyConstructor, Constructor, getRpcDiscoverable, getRpcIntrospectable, getRpcMethods, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
 import { Message } from './message';
 import { Method } from './method';
 import { Proxied, RemoteSubscription } from './proxied';
@@ -36,6 +36,40 @@ export interface InFlightRequest {
 }
 
 export type ServiceFactory<T = any> = (session: RPCSession) => T;
+
+interface RegisteredService<T = any> {
+    factory: ServiceFactory<T>;
+    discoverable: boolean;
+    introspectable: boolean;
+    methods: string[];
+}
+
+export interface DiscoveredService {
+    name: string;
+    discoverable: boolean;
+    introspectable: boolean;
+}
+
+export interface IntrospectedMethod {
+    name: string;
+    parameters?: IntrospectedParameter[];
+    description?: string;
+}
+
+// export interface IntrospectedType {
+//  // TODO
+// }
+
+export interface IntrospectedParameter {
+    name?: string;
+    simpleType?: 'string' | 'number' | 'boolean' | 'object' | 'undefined' | 'unknown';
+    //type?: IntrospectedType;
+    description?: string;
+}
+
+export interface IntrospectedService extends DiscoveredService {
+    methods: IntrospectedMethod[];
+}
 
 /**
  * Handles message passing, dispatch, resource management and other concerns for Conduit RPC sessions. Creating a 
@@ -68,7 +102,7 @@ export class RPCSession {
     }
 
     private waitChain = Promise.resolve();
-    
+
     /**
      * Delay further requests on this session until the promise returned by the given function returns.
      * The callback will not execute until previous locks have been completed. 
@@ -374,7 +408,35 @@ export class RPCSession {
     }
 
     
-    private serviceRegistry = new Map<string, ServiceFactory>();
+    private serviceRegistry = new Map<string, RegisteredService>();
+
+    @Method()
+    async discoverServices(): Promise<DiscoveredService[]> {
+        return Array.from(this.serviceRegistry.entries())
+            .filter(([name, service]) => service.discoverable)
+            .map(([name, service]) => ({ 
+                name,
+                discoverable: service.discoverable,
+                introspectable: service.introspectable
+            }))
+        ;
+    }
+
+    @Method()
+    async introspectService(name: string): Promise<IntrospectedService> {
+        let service = this.serviceRegistry.get(name);
+        if (!service?.introspectable)
+            throw new Error(`Service does not exist or is not introspectable`);
+
+        return {
+            name,
+            discoverable: service.discoverable,
+            introspectable: service.introspectable,
+            methods: service.methods.map(name => ({
+                name
+            }))
+        }
+    }
 
     /**
      * This map tracks individual objects which we've exported via RPC via object ID.
@@ -580,6 +642,9 @@ export class RPCSession {
             throw new Error(`Class '${klass.name}' must extend Service or be marked with @Remotable() to be registered as a service`);
         
         let serviceName = getRpcServiceName(klass);
+        let discoverable = getRpcDiscoverable(klass);
+        let introspectable = getRpcIntrospectable(klass);
+
         if (!serviceName)
             throw new Error(`Class '${klass.name}' must be marked with @Name()`);
 
@@ -596,7 +661,13 @@ export class RPCSession {
             );
         }
 
-        this.serviceRegistry.set(serviceName, factory);
+        this.serviceRegistry.set(serviceName, {
+            factory,
+            discoverable,
+            introspectable,
+            methods: getRpcMethods(klass)
+        });
+
         this.log(`Registered service with ID ${serviceName}`);
     }
 
@@ -622,7 +693,9 @@ export class RPCSession {
         }
         
         this.log(`getLocalService(): Creating a new service object for ${identity}...`);
-        let serviceObject = this.serviceRegistry.get(identity)(this);
+        
+        let registeredService = this.serviceRegistry.get(identity);
+        let serviceObject = registeredService.factory(this);
         this.registerLocalObject(serviceObject, identity);
         return serviceObject;
     }
