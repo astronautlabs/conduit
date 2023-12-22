@@ -73,10 +73,16 @@ export class Service {
     static proxy<T extends object>(this: AnyConstructor<T>, channel: Promise<RPCChannel>): Proxied<T>;
 
     /**
-     * Construct a new proxy for this service pointing at the given RPCChannel.
-     * The returned service proxy is immediately available for use. Requests to the 
+     * Construct a new proxy for the service identified by this class, which is running remotely on the 
+     * other side of the given RPCChannel. 
+     * 
+     * If channelOrEndpoint is a string, it is treated as a WebSockets URL, and a new durable WebSocket channel 
+     * connection will be created. If a connection to the endpoint already exists, the connection will be reused.
+     * 
+     * The returned service proxy is immediately available for use without awaiting. Requests to the 
      * proxy will be automatically delayed while the service object is obtained from the 
-     * remote endpoint.
+     * remote endpoint. 
+     * 
      * @param channel The channel to connect to
      */
     static proxy<T extends object>(this: AnyConstructor<T>, channel: RPCChannel): Proxied<T>;
