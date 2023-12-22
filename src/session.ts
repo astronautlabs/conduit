@@ -725,6 +725,15 @@ export class RPCSession {
 
         let subscription = await observable.subscribe(value => (eventReceiver as any).next(value));
 
+        // If the remote gets disconnected, it's important that we unsubscribe from the local observable
+        // to ensure that we do not send next() method calls to an object which has been lost (which would 
+        // result in "No receiver specified" errors). We'll also clean up this stateLost subscription if the 
+        // observable is manually unsubscribed by the remote.
+
+        subscription.add(this.channel.stateLost.subscribe(() => {
+            subscription.unsubscribe();
+        }));
+
         return inlineRemotable<RemoteSubscription>({
             unsubscribe: async () => {
                 subscription.unsubscribe();
