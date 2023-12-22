@@ -730,10 +730,12 @@ export class RPCSession {
         // result in "No receiver specified" errors). We'll also clean up this stateLost subscription if the 
         // observable is manually unsubscribed by the remote.
 
-        subscription.add(this.channel.stateLost.subscribe(() => {
-            subscription.unsubscribe();
-        }));
-
+        if (this.channel.stateLost) {
+            subscription.add(this.channel.stateLost.subscribe(() => {
+                subscription.unsubscribe();
+            }));
+        }
+        
         return inlineRemotable<RemoteSubscription>({
             unsubscribe: async () => {
                 subscription.unsubscribe();
