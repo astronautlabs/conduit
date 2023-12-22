@@ -528,6 +528,9 @@ export class RPCSession {
             this.log(`Resolving local ${JSON.stringify(ref)}`);
             // Remote to the other side, AKA on this side it is local
             object = this.getLocalObjectById(ref['Rε']);
+
+            if (object === undefined)
+                throw new Error(`No such object with ID '${ref['Rε']}'. Did you keep a reference to a dynamic object across a connection loss?`);
         } else {
             console.dir(ref);
             throw new Error(`RemoteRef did not specify a side`);
