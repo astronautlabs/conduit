@@ -19,7 +19,6 @@ import { DurableSocketChannel } from "./channel";
         sessionId?: string
     ) {
         this._sessionId = sessionId;
-        this.connect();
         this.ready = new Promise<this>((resolve, reject) => {
             this.addEventListener('open', () => resolve(this));
             this.addEventListener('close', e => {
@@ -33,6 +32,8 @@ import { DurableSocketChannel } from "./channel";
         let wasRestored: () => void = () => {};
         this.addEventListener('lost', () => this.ready = new Promise<this>((res, _) => wasRestored = () => res(this)));
         this.addEventListener('restore', e => wasRestored());
+        
+        this.connect();
     }
 
     ready: Promise<this>;
@@ -52,7 +53,11 @@ import { DurableSocketChannel } from "./channel";
 
     private connecting = false;
 
-    private connect() {
+    protected async createSocket(url: string, protocols: string[]): Promise<WebSocket> {
+        return new WebSocket(url, protocols);
+    }
+
+    private async connect() {
         if (this.connecting) {
             console.warn(`[Conduit/DurableSocket] Received connect() while still connecting! This is a bug. Request ignored.`);
             if (this._socket) {
@@ -77,7 +82,7 @@ import { DurableSocketChannel } from "./channel";
         }
 
         let connected = false;
-        let socket = new WebSocket(this.urlWithSessionId, this.protocols);
+        let socket = await this.createSocket(this.urlWithSessionId, Array.isArray(this.protocols) ? this.protocols : [ this.protocols ]);
 
         this._socket = socket;
         this._socket.onopen = ev => {

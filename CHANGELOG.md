@@ -1,3 +1,8 @@
+# 0.4.10
+
+- Add `createSocket()` method to `DurableSocket` to allow alternative implementations of WebSocket and other 
+  pre-validation logic.
+
 # 0.4.9
 
 - Fixes issues which causes duplicate web sockets to be created when trying to reconnect if conditions are 
