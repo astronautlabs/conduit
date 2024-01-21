@@ -339,8 +339,8 @@ import { DurableSocketChannel } from "./channel";
     private _onmessage: (this: WebSocket, ev: MessageEvent) => any;
     private _onopen: (this: WebSocket, ev: Event) => any;
 
-    get protocol() { return this._socket.protocol; }
-    get readyState() { return this._socket.readyState; }
+    get protocol() { return this._socket?.protocol; }
+    get readyState() { return this._socket?.readyState; }
 
     close(code?: number, reason?: string): void {
         this._closed = true;
