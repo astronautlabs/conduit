@@ -1,3 +1,7 @@
+# 0.4.11
+
+- Allow abstract constructors when calling registerService(), as long as a factory is provided.
+
 # 0.4.10
 
 - Add `createSocket()` method to `DurableSocket` to allow alternative implementations of WebSocket and other 

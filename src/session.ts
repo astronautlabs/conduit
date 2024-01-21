@@ -573,8 +573,10 @@ export class RPCSession {
      *                a default factory is created which constructs the class with default parameters (this means each
      *                session will have a separate instance of the service class).
      */
-    registerService(klass: Constructor, factory?: ServiceFactory) {
-        factory ??= () => new klass();
+    registerService(klass: Constructor);
+    registerService(klass: AnyConstructor, factory: ServiceFactory);
+    registerService(klass: AnyConstructor, factory?: ServiceFactory) {
+        factory ??= () => new (klass as Constructor)();
 
         if (getRpcType(klass) !== 'remotable')
             throw new Error(`Class '${klass.name}' must extend Service or be marked with @Remotable() to be registered as a service`);
