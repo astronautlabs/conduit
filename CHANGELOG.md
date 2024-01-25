@@ -1,5 +1,9 @@
 # 0.4.11
 
+- You can now query a `Service.proxy()` for its endpoint, when available, by using `Service.endpointFor(proxy)`.
+
+# 0.4.11
+
 - Allow abstract constructors when calling registerService(), as long as a factory is provided.
 
 # 0.4.10

@@ -98,7 +98,17 @@ export class Service {
             channelPromise = Promise.resolve(channelOrEndpoint);
         }
 
-        return immediateServiceProxy<T>(channelPromise.then(channel => Service.sessionForChannel(channel)), this);
+        let proxy = immediateServiceProxy<T>(channelPromise.then(channel => Service.sessionForChannel(channel)), this);
+
+        if (typeof channelOrEndpoint === 'string') {
+            Reflect.defineMetadata('rpc:endpoint', channelOrEndpoint, proxy);
+        }
+
+        return proxy;
+    }
+
+    static endpointOf(service): string {
+        return Reflect.getMetadata('rpc:endpoint', service);
     }
 
     private static channelSessions = new WeakMap<RPCChannel, RPCSession>();
