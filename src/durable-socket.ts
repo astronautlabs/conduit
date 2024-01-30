@@ -19,7 +19,6 @@ import { DurableSocketChannel } from "./channel";
         sessionId?: string
     ) {
         this._sessionId = sessionId;
-        this.connect();
         this.ready = new Promise<this>((resolve, reject) => {
             this.addEventListener('open', () => resolve(this));
             this.addEventListener('close', e => {
@@ -33,6 +32,8 @@ import { DurableSocketChannel } from "./channel";
         let wasRestored: () => void = () => {};
         this.addEventListener('lost', () => this.ready = new Promise<this>((res, _) => wasRestored = () => res(this)));
         this.addEventListener('restore', e => wasRestored());
+        
+        this.connect();
     }
 
     ready: Promise<this>;
@@ -50,12 +51,55 @@ import { DurableSocketChannel } from "./channel";
         return new DurableSocketChannel(this);
     }
 
-    private connect() {
+    private connecting = false;
+
+    protected async createSocket(url: string, protocols: string[]): Promise<WebSocket> {
+        return new WebSocket(url, protocols);
+    }
+
+    private async connect() {
+        if (this.connecting) {
+            console.warn(`[Conduit/DurableSocket] Received connect() while still connecting! This is a bug. Request ignored.`);
+            if (this._socket) {
+                console.warn(`[Conduit/DurableSocket] Existing socket has state: ${this._socket.readyState}`);
+                console.dir(this._socket);
+            }
+            return;
+        }
+
+        this.connecting = true;
+
+        if (this._socket) {
+            console.warn(`[Conduit/DurableSocket] Old socket is still present. Cleaning up...`);
+
+            try {
+                this._socket.close();
+                this._socket = null;
+            } catch (e) {
+                console.warn(`[Conduit/DurableSocket] While cleaning up old socket: ${e.message}`);
+                console.warn(e);
+            }
+        }
+
         let connected = false;
-        this._socket = new WebSocket(this.urlWithSessionId, this.protocols);
-        this._socket.onopen = ev => (connected = true, this.handleConnect(ev));
+        let socket = await this.createSocket(this.urlWithSessionId, Array.isArray(this.protocols) ? this.protocols : [ this.protocols ]);
+
+        this._socket = socket;
+        this._socket.onopen = ev => {
+            connected = true;
+            this.connecting = false;
+            this.handleConnect(ev);
+        };
         this._socket.onerror = ev => this.dispatchEvent(ev);
-        this._socket.onclose = ev => this.handleLost();
+        this._socket.onclose = ev => {
+            if (this._socket !== socket) {
+                console.warn(`[Conduit/DurableSocket] Received close for socket which is not the current socket!`);
+                console.warn(`[Conduit/DurableSocket] Refusing to enqueue reconnect handler.`);
+                return;
+            }
+            this.connecting = false;
+            this.handleLost();
+        }
         this._socket.onmessage = ev => this.handleMessage(ev);
     }
 
@@ -117,6 +161,8 @@ import { DurableSocketChannel } from "./channel";
         }
 
         this.lastPong = Date.now();
+        clearTimeout(this.pingTimer);
+        
         if (this.enablePing) this.pingTimer = setInterval(() => {
             if (this._closed) {
                 clearInterval(this.pingTimer);
@@ -126,20 +172,22 @@ import { DurableSocketChannel } from "./channel";
             try {
                 this.send(JSON.stringify({ type: 'ping' }));
             } catch (e) {
-                //console.error(`[Socket] Failed to send ping message. Assuming connection is broken. [${this.url}]`);
+                console.error(`[Conduit/DurableSocket] Failed to send initial ping message. Assuming connection is broken. [${this.url}]`);
                 try {
                     this._socket?.close();
                 } catch (e) {
-                    //console.error(`[Socket] Failed to close socket after ping failure: ${e.message} [${this.url}]`);
+                    console.error(`[Conduit/DurableSocket] Failed to close socket after ping failure: ${e.message} [${this.url}]`);
                 }
                 return;
             }
 
             if (this.lastPong < Date.now() - this.pingKeepAliveInterval) {
+                console.error(`[Conduit/DurableSocket] Not receiving return pings. Reconnecting socket.`);
+
                 try {
                     this.handleLost();
                 } catch (e) {
-                    console.error(`[Socket] Failed to close socket after timeout waiting for pong: ${e.message} [${this.url}]`);
+                    console.error(`[Conduit/DurableSocket] Failed to handle connection loss after ping timeout: ${e.message} [${this.url}]`);
                 }
             }
         }, this.pingInterval);
@@ -220,9 +268,12 @@ import { DurableSocketChannel } from "./channel";
         );
     }
 
+    private reconnectTimeout;
+
     private attemptToReconnect() {
-        //console.log(`[Socket] Waiting ${this.actualReconnectTime}ms before reconnect (attempt ${this._attempt}) [${this.url}]`);
-        setTimeout(() => this.connect(), this.actualReconnectTime);
+        console.log(`[Conduit/DurableSocket] Waiting ${this.actualReconnectTime}ms before reconnect (attempt ${this._attempt}) [${this.url}]`);
+        clearTimeout(this.reconnectTimeout);
+        this.reconnectTimeout = setTimeout(() => this.connect(), this.actualReconnectTime);
     }
 
     reconnect() {
@@ -288,8 +339,8 @@ import { DurableSocketChannel } from "./channel";
     private _onmessage: (this: WebSocket, ev: MessageEvent) => any;
     private _onopen: (this: WebSocket, ev: Event) => any;
 
-    get protocol() { return this._socket.protocol; }
-    get readyState() { return this._socket.readyState; }
+    get protocol() { return this._socket?.protocol; }
+    get readyState() { return this._socket?.readyState; }
 
     close(code?: number, reason?: string): void {
         this._closed = true;

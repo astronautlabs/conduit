@@ -15,3 +15,5 @@ export * from './response';
 export * from './rpc-proxy';
 export * from './service';
 export * from './session';
+export * from './logger';
+export * from './errors';

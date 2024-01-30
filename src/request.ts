@@ -7,6 +7,7 @@ export interface Request {
     metadata: Record<string, any>;
     method: string;
     parameters: any[];
+    stackTrace?: string;
 }
 
 export function isRequest(message: Message): message is Request {
