@@ -3,7 +3,8 @@
 > 🚧 **Work In Progress**  
 > This library is in an alpha state. It is not yet ready for production use.
 
-[![NPM](https://img.shields.io/npm/v/@astronautlabs/conduit.svg)](https://www.npmjs.com/package/@astronautlabs/conduit) [![Build Status](https://circleci.com/gh/astronautlabs/conduit/tree/main.svg?style=shield)](https://circleci.com/gh/astronautlabs/conduit)
+[![NPM](https://img.shields.io/npm/v/@astronautlabs/conduit.svg)](https://www.npmjs.com/package/@astronautlabs/conduit) 
+[![Build Status](https://circleci.com/gh/astronautlabs/conduit/tree/main.svg?style=shield)](https://circleci.com/gh/astronautlabs/conduit)
 
 A powerful way to do RPC on the web.
 
@@ -199,23 +200,64 @@ mechanism for using well-known references (other than the `RPCSession` well know
 
 # Logging
 
-The `RPCSession` class logs certain information which may be important to the operation of your application. By default the `console` global is used to do this, but you can override or suppress the logs `RPCSession` does by setting `RPCSession#logger`. It is expected that you would tie it into your application's standard logging system.
+The `RPCSession` class logs certain information which may be important to the operation of your application. By default 
+the `console` global is used to do this, but you can override or suppress the logs `RPCSession` does by setting 
+`RPCSession#logger`. It is expected that you would tie it into your application's standard logging system.
 
 # Exception Handling
 
-When an exception is thrown by the remote side of a Conduit RPC session it is handled specially. By default the error will be logged using `RPCSession#logger` with a severity of `error`, and an `RPCInternalError` will be sent across the wire in the thrown error's place. This allows you to inspect your application's logs for diagnostic information when an exception occurs while handling RPC calls.
+When an exception is thrown by the remote side of a Conduit RPC session it is handled specially. By default the error 
+will be logged using `RPCSession#logger` with a severity of `error`, and an `RPCInternalError` will be sent across the 
+wire in the thrown error's place. This allows you to inspect your application's logs for diagnostic information when 
+an exception occurs while handling RPC calls.
 
-Often it is desirable to intentionally throw a specific error to the caller. You can mark thrown errors specially so that they are sent without being replaced by `RPCInternalError`. The simplest way to do this is to call the `raise()` function exported by Conduit instead of using the `throw` keyword. That function returns Typescript's `never` type as internally it marks the passed error using the `org.webrpc.intentional-error` well-known symbol (see `Symbol.for()`) and performs a `throw`. If Conduit detects an exception thrown via `raise()` it will send it directly to the caller without replacing it with `RPCInternalError`. 
+Often it is desirable to intentionally throw a specific error to the caller. You can mark thrown errors specially so 
+that they are sent without being replaced by `RPCInternalError`. The simplest way to do this is to call the `raise()` 
+function exported by Conduit instead of using the `throw` keyword. That function returns Typescript's `never` type as 
+internally it marks the passed error using the `org.webrpc.intentional-error` well-known symbol (see `Symbol.for()`) 
+and performs a `throw`. If Conduit detects an exception thrown via `raise()` it will send it directly to the caller 
+without replacing it with `RPCInternalError`. 
 
-If you wish to allow all exceptions to flow to the caller unimpeded, you can disable this behavior by setting `RPCSession#safeExceptionsMode` to `false`. Note that this may expose internals of your application and filesystem structure to untrusted callers.
+If you wish to allow all exceptions to flow to the caller unimpeded, you can disable this behavior by setting 
+`RPCSession#safeExceptionsMode` to `false`. Note that this may expose internals of your application and filesystem 
+structure to untrusted callers.
 
 ## Server (callee) Stack Traces
 
-Even if an exception is intentionally returned via `raise()` (or when `safeExceptionsMode` is disabled), the stack trace of the exception is removed to avoid exposing implementation details of your application. If you wish to allow full stack traces to be received by the client you can set `RPCSession#maskStackTraces` to `false`.
+Even if an exception is intentionally returned via `raise()` (or when `safeExceptionsMode` is disabled), the stack 
+trace of the exception is removed to avoid exposing implementation details of your application. If you wish to allow 
+full stack traces to be received by the client you can set `RPCSession#maskStackTraces` to `false`.
 
 ## Client (caller) Stack Traces
 
-Since stack traces of errors which originate from RPC calls can contain information from the remote side, stack traces may not be useful if the caller is at fault. To improve this situation, Conduit automatically captures the stack trace at the call-site of an RPC method and includes this in any error received by the remote side when rethrowing it on the local side. In some cases this may be a better error than you would get if the error were directly thrown from the RPC implementation. If you wish to disable injection of client-side stack traces, you can do so by setting `RPCSession#addCallerStackTraces` to `false`.
+Since stack traces of errors which originate from RPC calls can contain information from the remote side, stack traces 
+may not be useful if the caller is at fault. To improve this situation, Conduit automatically captures the stack trace 
+at the call-site of an RPC method and includes this in any error received by the remote side when rethrowing it on the 
+local side. In some cases this may be a better error than you would get if the error were directly thrown from the RPC 
+implementation. If you wish to disable injection of client-side stack traces, you can do so by setting 
+`RPCSession#addCallerStackTraces` to `false`.
+
+# Discoverability
+
+Conduit has a built-in service discovery mechanism. Call `RPCSession#discoverServices()` to retrieve the services being 
+advertised by the remote side. Services are discoverable by default. Each service can be configured to not be 
+discoverable by applying the `@Discoverable(false)` decorator.
+
+You can disable introspection for all services by setting `RPCSession#enableDiscovery` to `false`.
+
+# Introspection
+
+Conduit can describe the methods and events available on a particular service via introspection. Call 
+`RPCSession#introspectService()` to request information about a specific service. Services are introspectable by 
+default. Each service can be configured to not be introspectable by applying the `@Introspectable(false)` decorator.
+
+Discoverability and introspection are mutually independent operations. A service can be configured to be discoverable 
+but not introspectable, or introspectable but not discoverable, both or neither.
+
+The type information available in introspection results is basic, roughly equivalent to what Typescript's 
+`emitDecoratorMetadata` can provide. In the future more advanced type information will be supported.
+
+You can disable introspection for all services by setting `RPCSession#enableIntrospection` to `false`.
 
 # Wire Format
 
@@ -243,11 +285,16 @@ See below for details about these message types.
 
 This type of method is sent whenever a remote procedure call is initiated.
 
-- `id` -- A UUIDv4 which is unique to this request. It will be used to identify the response which correlates with this request.
-- `receiver` -- The remote object which should receive this message. This will be a Reference, see below for more details on how references work.
-- `method` -- The string name of the method which is being called. If the method is not allowed, an error will be returned in the response.
-- `parameters` -- An array of the positional parameters that should be passed to the method. Any valid JSON object is allowed, and References are also supported (see below).
-- `metadata` -- Arbitary data that Conduit itself will not consider. Useful for passing useful information from the sender to the receiver.
+- `id` -- A UUIDv4 which is unique to this request. It will be used to identify the response which correlates with this 
+  request.
+- `receiver` -- The remote object which should receive this message. This will be a Reference, see below for more 
+  details on how references work.
+- `method` -- The string name of the method which is being called. If the method is not allowed, an error will be 
+  returned in the response.
+- `parameters` -- An array of the positional parameters that should be passed to the method. Any valid JSON object is 
+  allowed, and References are also supported (see below).
+- `metadata` -- Arbitary data that Conduit itself will not consider. Useful for passing useful information from the 
+  sender to the receiver.
 
 ## `response`
 ```json

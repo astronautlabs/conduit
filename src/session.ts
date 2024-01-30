@@ -121,6 +121,18 @@ export class RPCSession {
     }
 
     /**
+     * Whether discovery is allowed on this session. Set to false to globally disable discovery. Note that each 
+     * service can also opt out of discovery by using the `@Discovery(false)` decorator.
+     */
+    enableDiscovery = true;
+
+    /**
+     * Whether introspection is allowed on this session. Set to false to globally disable introspection. Note that each 
+     * service can also opt out of introspection by using the `@Introspectable(false)` decorator.
+     */
+    enableIntrospection = true;
+
+    /**
      * When safe exceptions mode is enabled, Conduit will only allow exception information to be sent to the client if 
      * the exception was thrown via the raise() function provided by the @/conduit package. Other exceptions will get 
      * turned into RPCInternalError.
@@ -666,6 +678,9 @@ export class RPCSession {
      */
     @Method()
     async getDiscoverableServices(): Promise<DiscoveredService[]> {
+        if (!this.enableDiscovery)
+            return [];
+
         return Array.from(this.serviceRegistry.entries())
             .filter(([name, service]) => service.discoverable)
             .map(([name, service]) => ({ 
@@ -699,9 +714,14 @@ export class RPCSession {
      */
     @Method()
     async getServiceIntrospection(name: string): Promise<IntrospectedService> {
+        let notIntrospectableError = new Error(`Service does not exist or is not introspectable`);
+
+        if (!this.enableIntrospection)
+            raise(notIntrospectableError);
+
         let service = this.serviceRegistry.get(name);
         if (!service?.introspectable)
-            raise(new Error(`Service does not exist or is not introspectable`));
+            raise(notIntrospectableError);
 
         return {
             name,
