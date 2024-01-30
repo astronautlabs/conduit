@@ -113,6 +113,110 @@ setTimeout(async () => await subscription.unsubscribe(), 5*1000);
 // console: tick
 ```
 
+# Channels
+
+You can use any kind of communication channel underneath an RPCSession. Some channel types are included:
+
+* `SocketChannel` - Perform RPC over a WebSocket
+* `WindowChannel` - Perform RPC between the current window and a remote window, such as an `<iframe>` or a popup
+* `LocalChannel` - A simple two-sided in-memory channel that is good for testing.
+
+Since RPC over WebSockets is so common, it is made especially convenient:
+
+```typescript
+let session = await RPCSession.connect(`wss://example.com/my/socket`);
+```
+
+When the promise returned by `connect()` resolves the connection is fully established and ready for communication. If a 
+connection error occurs, the promise will reject.
+
+---
+
+You can implement your own custom channels by implementing the `RPCChannel` interface
+
+```typescript
+export interface RPCChannel {
+    received: Observable<string>;
+    send(message: string);
+    close?();
+}
+```
+
+# Services
+
+The primary purpose of Conduit is to expose service objects with well-known identities which have well-known interfaces.
+From a developer experience perspective, you need only use `registerService` and `getRemoteService()` to register 
+service classes of your own and consume methods of the remote service you are talking to. Remember that Conduit is 
+bidirectional, and services can be registered on either side. It is totally possible (and sometimes desirable) for a 
+WebSocket *client* to register a named service, and for the WebSocket *server* to acquire an instance of that service 
+and call RPC methods on it.
+
+For those interested in the mechanics of how this works, the local `RPCSession` implements 
+`async getRemoteService(serviceName)` as `await this.remote.getLocalService(serviceName)`, where `this.remote` is the 
+RPC proxy of the remote `RPCSession`. So there is no special mechanics for service discovery, these are just well known 
+RPC calls of the `RPCSession` class.
+
+# Service Factories
+
+While it is possible for the pair of `RPCSession` instances to communicate over a Conduit channel without any 
+coordination because they use long-lived well-known object references, the potential ways you might want to manage 
+the object lifecycles related to actual "service" objects within the applications you build with Conduit may differ
+greatly depending on your use case. By default service objects are created on-demand for a specific RPCSession 
+and are not shared, but you might want to share service objects across multiple sessions (ie multiple connections in the
+context of Conduit over Websockets). Control of the lifecycle of service objects can be controlled using custom 
+"service factories".
+
+```typescript
+session.registerService(MyService, () => myServiceInstance); // where myServiceInstance is not specific to this session
+```
+
+Service factories are passed a single argument, the `RPCSession` that is responsible for creating them. This allows you 
+easy access to the related session if you need it.
+
+```typescript
+session.registerService(MyService, session => new MyService(session));
+```
+
+Since service factories are just functions, you could use this to add dependency injection.
+
+# Services without registration, and other low-level customization
+
+If you wish to dynamically create services with arbitrary logic, you can subclass `RPCSession`. 
+
+```typescript
+class MySession extends RPCSession {
+    @Method()
+    override getLocalService(identity: string) {
+        // Add arbitrary logic for creating service objects here
+        return new MyService();
+    }
+}
+```
+
+This can be used to modify any part of the base APIs, or even add new top-level APIs. It is also how one might use 
+well-known references within an application, since the default implementation of `RPCSession` does not provide any 
+mechanism for using well-known references (other than the `RPCSession` well known reference).
+
+# Logging
+
+The `RPCSession` class logs certain information which may be important to the operation of your application. By default the `console` global is used to do this, but you can override or suppress the logs `RPCSession` does by setting `RPCSession#logger`. It is expected that you would tie it into your application's standard logging system.
+
+# Exception Handling
+
+When an exception is thrown by the remote side of a Conduit RPC session it is handled specially. By default the error will be logged using `RPCSession#logger` with a severity of `error`, and an `RPCInternalError` will be sent across the wire in the thrown error's place. This allows you to inspect your application's logs for diagnostic information when an exception occurs while handling RPC calls.
+
+Often it is desirable to intentionally throw a specific error to the caller. You can mark thrown errors specially so that they are sent without being replaced by `RPCInternalError`. The simplest way to do this is to call the `raise()` function exported by Conduit instead of using the `throw` keyword. That function returns Typescript's `never` type as internally it marks the passed error using the `org.webrpc.intentional-error` well-known symbol (see `Symbol.for()`) and performs a `throw`. If Conduit detects an exception thrown via `raise()` it will send it directly to the caller without replacing it with `RPCInternalError`. 
+
+If you wish to allow all exceptions to flow to the caller unimpeded, you can disable this behavior by setting `RPCSession#safeExceptionsMode` to `false`. Note that this may expose internals of your application and filesystem structure to untrusted callers.
+
+## Server (callee) Stack Traces
+
+Even if an exception is intentionally returned via `raise()` (or when `safeExceptionsMode` is disabled), the stack trace of the exception is removed to avoid exposing implementation details of your application. If you wish to allow full stack traces to be received by the client you can set `RPCSession#maskStackTraces` to `false`.
+
+## Client (caller) Stack Traces
+
+Since stack traces of errors which originate from RPC calls can contain server-side information, by default these stack traces are not useful when the fault of the exception is with the caller. To improve this situation, Conduit automatically captures the stack trace at the call-site of an RPC method and includes this in any error received by the remote side when rethrowing it on the local side. In some cases this may be a better error than you would get if the error were directly thrown from the RPC implementation.
+
 # Wire Format
 
 `@/conduit` encodes messages in JSON, making it ideal for use on the web. Each message has a type, identified by the 
@@ -241,87 +345,3 @@ instance without knowing anything about the object iself, the channel, etc.
 
 APIs like service discovery, introspection, and reference finalization are all implemented as Conduit RPC calls to the 
 remote side's `RPCSession` instance. For more about those APIs read on below.
-
-# Channels
-
-You can use any kind of communication channel underneath an RPCSession. Some channel types are included:
-
-* `SocketChannel` - Perform RPC over a WebSocket
-* `WindowChannel` - Perform RPC between the current window and a remote window, such as an `<iframe>` or a popup
-* `LocalChannel` - A simple two-sided in-memory channel that is good for testing.
-
-Since RPC over WebSockets is so common, it is made especially convenient:
-
-```typescript
-let session = await RPCSession.connect(`wss://example.com/my/socket`);
-```
-
-When the promise returned by `connect()` resolves the connection is fully established and ready for communication. If a 
-connection error occurs, the promise will reject.
-
----
-
-You can implement your own custom channels by implementing the `RPCChannel` interface
-
-```typescript
-export interface RPCChannel {
-    received: Observable<string>;
-    send(message: string);
-    close?();
-}
-```
-
-# Services
-
-The primary purpose of Conduit is to expose service objects with well-known identities which have well-known interfaces.
-From a developer experience perspective, you need only use `registerService` and `getRemoteService()` to register 
-service classes of your own and consume methods of the remote service you are talking to. Remember that Conduit is 
-bidirectional, and services can be registered on either side. It is totally possible (and sometimes desirable) for a 
-WebSocket *client* to register a named service, and for the WebSocket *server* to acquire an instance of that service 
-and call RPC methods on it.
-
-For those interested in the mechanics of how this works, the local `RPCSession` implements 
-`async getRemoteService(serviceName)` as `await this.remote.getLocalService(serviceName)`, where `this.remote` is the 
-RPC proxy of the remote `RPCSession`. So there is no special mechanics for service discovery, these are just well known 
-RPC calls of the `RPCSession` class.
-
-# Service Factories
-
-While it is possible for the pair of `RPCSession` instances to communicate over a Conduit channel without any 
-coordination because they use long-lived well-known object references, the potential ways you might want to manage 
-the object lifecycles related to actual "service" objects within the applications you build with Conduit may differ
-greatly depending on your use case. By default service objects are created on-demand for a specific RPCSession 
-and are not shared, but you might want to share service objects across multiple sessions (ie multiple connections in the
-context of Conduit over Websockets). Control of the lifecycle of service objects can be controlled using custom 
-"service factories".
-
-```typescript
-session.registerService(MyService, () => myServiceInstance); // where myServiceInstance is not specific to this session
-```
-
-Service factories are passed a single argument, the `RPCSession` that is responsible for creating them. This allows you 
-easy access to the related session if you need it.
-
-```typescript
-session.registerService(MyService, session => new MyService(session));
-```
-
-Since service factories are just functions, you could use this to add dependency injection.
-
-# Services without registration, and other low-level customization
-
-If you wish to dynamically create services with arbitrary logic, you can subclass `RPCSession`. 
-
-```typescript
-class MySession extends RPCSession {
-    @Method()
-    override getLocalService(identity: string) {
-        // Add arbitrary logic for creating service objects here
-        return new MyService();
-    }
-}
-```
-
-This can be used to modify any part of the base APIs, or even add new top-level APIs. It is also how one might use 
-well-known references within an application, since the default implementation of `RPCSession` does not provide any 
-mechanism for using well-known references (other than the `RPCSession` well known reference).

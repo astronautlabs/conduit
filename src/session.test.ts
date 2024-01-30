@@ -9,15 +9,20 @@ import { Subject } from "rxjs";
 import { RPCSession } from "./session";
 import { Proxied } from "./proxied";
 import { TestChannel } from "./test-channel";
+import { RPCInternalError, raise } from "./errors";
+import { RPCLogOptions } from "./logger";
 
 describe('RPCSession', it => {
-    function sessionPair() {
+    function sessionPair(options: { safeExceptionsMode?: boolean, maskStackTraces?: boolean, addClientStackTraces?: boolean } = {}) {
         let [channelA, channelB] = TestChannel.makePair();
         let sessionA = new RPCSession(channelA);
         let sessionB = new RPCSession(channelB);
 
         sessionA.tag = 'A';
         sessionB.tag = 'B';
+
+        Object.assign(sessionA, options);
+        Object.assign(sessionB, options);
 
         return [sessionA, sessionB];
     }
@@ -78,6 +83,247 @@ describe('RPCSession', it => {
 
         expect(received).to.equal('one|two|three|');
         expect(result).to.equal(callbackB);
+    });
+
+    it('Translates standard exceptions appropriately', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async EvalError() { throw new EvalError(); }
+            @Method() async RangeError() { throw new RangeError(); }
+            @Method() async ReferenceError() { throw new ReferenceError(); }
+            @Method() async SyntaxError() { throw new SyntaxError(); }
+            @Method() async TypeError() { throw new TypeError(); }
+            @Method() async URIError() { throw new URIError(); }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        expect(await serviceA.EvalError().catch(e => e)).to.be.instanceOf(EvalError);
+        expect(await serviceA.RangeError().catch(e => e)).to.be.instanceOf(RangeError);
+        expect(await serviceA.ReferenceError().catch(e => e)).to.be.instanceOf(ReferenceError);
+        expect(await serviceA.SyntaxError().catch(e => e)).to.be.instanceOf(SyntaxError);
+        expect(await serviceA.TypeError().catch(e => e)).to.be.instanceOf(TypeError);
+        expect(await serviceA.URIError().catch(e => e)).to.be.instanceOf(URIError);
+    });
+
+    it('Preserves exception properties', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        let error = new TypeError();
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { throw error; }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(error).not.to.equal(error2); // should not be reference equal
+        expect(error2.stack).to.equal(error.stack);
+        expect(error2.name).to.equal(error.name);
+        expect(error2.message).to.equal(error.message);
+    });
+
+    it('Preserves throwable properties', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        let error = { foo: 123, bar: 321 };
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { throw error; }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(error).not.to.equal(error2); // should not be reference equal
+        expect(error2).to.eql(error);
+    });
+
+    it('Preserves custom error properties', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+
+        class CustomError extends Error {
+            constructor(readonly foo: number, readonly bar: number) {
+                super('Custom error has occurred');
+            }
+        }
+
+        let error = new CustomError(123, 321);
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { throw error; }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(error).not.to.equal(error2); // should not be reference equal
+        expect(error2.message).to.equal(error.message);
+        expect(error2.stack).to.equal(error.stack);
+        expect(error2.name).to.equal(error.name);
+        expect(error2.foo).to.equal(error.foo);
+        expect(error2.bar).to.equal(error.bar);
+    });
+
+    it('Serializes registered custom errors properly, even without specifying `name`', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+
+        class CustomError extends Error {
+            constructor(readonly foo: number, readonly bar: number) {
+                super('Custom error has occurred');
+            }
+        }
+
+        let error = new CustomError(123, 321);
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { throw error; }
+        }
+
+        sessionB.registerErrorType(CustomError);
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(error).not.to.equal(error2); // should not be reference equal
+        expect(error2).to.be.instanceOf(CustomError);
+        expect(error2.message).to.equal(error.message);
+        expect(error2.stack).to.equal(error.stack);
+        expect(error2.name).to.equal(error.name);
+        expect(error2.foo).to.equal(error.foo);
+        expect(error2.bar).to.equal(error.bar);
+    });
+
+    it('can mask stack traces', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: true, addClientStackTraces: false });
+
+        class CustomError extends Error {
+            constructor(readonly foo: number, readonly bar: number) {
+                super('Custom error has occurred\netc');
+            }
+        }
+
+        let error = new CustomError(123, 321);
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { throw error; }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(error).not.to.equal(error2); // should not be reference equal
+        expect(error2.stack).to.equal(`${error.name}: ${error.message}`);
+    });    
+    
+    it('#safeExceptionsMode allows intentional exceptions through', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: true, maskStackTraces: false, addClientStackTraces: false });
+
+        class CustomError extends Error {
+            constructor(readonly foo: number, readonly bar: number) {
+                super('Custom error has occurred\netc');
+            }
+        }
+
+        let error = new CustomError(123, 321);
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { raise(error); }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(error).not.to.equal(error2); // should not be reference equal
+        expect(error2.stack).to.equal(error.stack);
+    });
+    
+    it('#safeExceptionsMode intercepts unintentional exceptions', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: true, maskStackTraces: false, addClientStackTraces: false });
+
+        class CustomError extends Error {
+            constructor(readonly foo: number, readonly bar: number) {
+                super('Custom error has occurred\netc');
+            }
+        }
+
+        let error = new CustomError(123, 321);
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { throw error; }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let logs: { message: string, options: RPCLogOptions }[] = [];
+
+        sessionA.logger = { 
+            log: (message: string, options: RPCLogOptions) => {
+                logs.push({ message, options });
+            }
+        };
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(logs.length).to.equal(1);
+        expect(logs[0].message).to.equal(`Error during A#raise(): ${error.stack}`);
+        expect(error).not.to.equal(error2); // should not be reference equal
+        expect(error2).to.be.instanceOf(RPCInternalError);
+        expect(error2.stack).not.to.equal(error.stack);
+        expect(error2.message).not.to.equal(error.message);
+    });
+    
+    it('#addClientStackTraces adds client stack tracing', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: true });
+
+        class CustomError extends Error {
+            constructor(readonly foo: number, readonly bar: number) {
+                super('Custom error has occurred\netc');
+            }
+        }
+
+        let error = new CustomError(123, 321);
+
+        @Name('org.webrpc.A')
+        class A extends Service {
+            @Method() async raise() { throw error; }
+        }
+
+        sessionA.registerService(A);
+        let serviceA: Proxied<A> = await sessionB.getRemoteService('org.webrpc.A');
+
+        let logs: { message: string, options: RPCLogOptions }[] = [];
+
+        sessionA.logger = { 
+            log: (message: string, options: RPCLogOptions) => {
+                logs.push({ message, options });
+            }
+        };
+
+        let error2 = await serviceA.raise().catch(e => e);
+
+        expect(error2.stack).includes('-- Client stack trace');
     });
 
     it('events work', async () => {

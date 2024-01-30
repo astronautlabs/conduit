@@ -15,6 +15,8 @@ import { isRequest, Request } from './request';
 import { isResponse, Response } from './response';
 import { RPCProxy } from './rpc-proxy';
 import { Name } from './name';
+import { RPCConsoleLogger, RPCLogger } from './logger';
+import { INTENTIONAL_ERROR, RPCError, RPCInternalError } from './errors';
 
 function isRemotable(obj: any): boolean {
     return obj && typeof obj === 'object' 
@@ -46,6 +48,7 @@ export type ServiceFactory<T = any> = (session: RPCSession) => T;
 @Remotable()
 export class RPCSession {
     constructor(readonly channel: RPCChannel) {
+        this.registerBuiltinErrors();
         this._remote = RPCProxy.create<RPCSession>(this, getRpcServiceName(RPCSession), '');
         this.registerService(RPCSession, () => this);
         this.registerLocalObject(this, getRpcServiceName(RPCSession));
@@ -54,11 +57,12 @@ export class RPCSession {
             try {
                 message = this.decodeMessage(data);
             } catch (e) {
+                this.emitFatalError(new Error(`Failed to decode message. The channel will be closed. Error: ${e.stack || e}`, { cause: e }));
                 channel.close?.();
                 return;
             }
 
-            this.onReceiveMessage(message)
+            this.onReceiveMessage(message, data);
         });
         channel.stateLost?.subscribe(() => {
             Array.from(this._requestMap.values()).forEach(req => {
@@ -67,6 +71,47 @@ export class RPCSession {
         });
     }
 
+    /**
+     * When safe exceptions mode is enabled, Conduit will only allow exception information to be sent to the client if 
+     * the exception was thrown via the raise() function provided by the @/conduit package. Other exceptions will get 
+     * turned into RPCInternalError.
+     */
+    safeExceptionsMode = true;
+
+    /**
+     * When true, stack traces are removed from errors before sending them over the wire.
+     */
+    maskStackTraces = true;
+
+    /**
+     * When true, the client stack trace is added to the end of deserialized errors before they are thrown. 
+     */
+    addClientStackTraces = true;
+
+    /**
+     * Cause the `fatalErrors` observable to emit the specified error.
+     * @param error 
+     */
+    protected emitFatalError(error: Error) {
+        this.logger.log(String(error.stack || error), { severity: 'error' });
+        this._fatalErrors.next(error);
+    }
+
+    private _fatalErrors = new Subject<Error>();
+
+    /**
+     * Receive notifications of fatal errors which cause the session to be ended.
+     */
+    readonly fatalErrors = this._fatalErrors.asObservable();
+
+    /**
+     * Responsible for logging messages out. Default implementation is RPCConsoleLogger, which just uses console.*
+     */
+    logger: RPCLogger = new RPCConsoleLogger();
+
+    /**
+     * Used by lock() and call() to allow delaying requests until some operation is complete.
+     */
     private waitChain = Promise.resolve();
     
     /**
@@ -141,17 +186,36 @@ export class RPCSession {
         return new RPCSession((await new DurableSocket(url).waitUntilReady()).asChannel());
     }
 
-    private _remote: Proxied<RPCSession>;
+    /**
+     * NOTE: The Omit is here to avoid an infinite type recursion-- even though Proxied<T> filters out all 
+     * non-async-function properties, it still causes TS to recur. Since we don't need the remote, and the remote 
+     * isn't available on the proxy anyway, we can work around the issue by omitting the recursion source.
+     */
+    private _remote: Proxied<Omit<RPCSession, 'remote'>>;
+
+    /**
+     * Retrieve the remote RPCSession for performing direct calls to it over Conduit.
+     */
     get remote() { return this._remote; }
 
+    /**
+     * Retrieve a proxy for a remote service according to the given service identity.
+     * @param serviceIdentity A class which is annotated with `@conduit.Name()`
+     * @throws when the remote cannot provide the given service
+     */
     async getRemoteService<T>(serviceIdentity: AnyConstructor<T>): Promise<Proxied<T>>
+    /**
+     * Retrieve a proxy for a remote service according to the given service identity
+     * @param serviceIdentity The name of the service to retrieve.
+     * @throws when the remote cannot provide the given service
+     */
     async getRemoteService<T = any>(serviceIdentity: string): Promise<Proxied<T>>
-    async getRemoteService(serviceIdentityOrClass: string | Function): Promise<Proxied<any>> {
+    async getRemoteService(serviceIdentityOrClass: string | Function): Promise<Proxied<unknown>> {
         if (typeof serviceIdentityOrClass === 'function')
             return this.getRemoteService(getRpcServiceName(serviceIdentityOrClass));
         
         let serviceIdentity: string = serviceIdentityOrClass;
-        this.log(`Finding remote service named '${serviceIdentity}...'`);
+        this.debugLog(`Finding remote service named '${serviceIdentity}...'`);
         return this.remote.getLocalService(serviceIdentity);
     }
 
@@ -165,10 +229,10 @@ export class RPCSession {
     }
 
     private decodeMessage(text: string) {
-        this.log(`Decoding: ${text}`);
+        this.debugLog(`Decoding: ${text}`);
         let postDecoded = JSON.parse(text, (_, v) => isRemoteRef(v) ? this.getObjectByRemoteRef(v) : v);
-        this.log(`Decoded:`);
-        this.logObject(postDecoded);
+        this.debugLog(`Decoded:`);
+        this.debugLogObject(postDecoded);
         return postDecoded;
     }
 
@@ -182,6 +246,32 @@ export class RPCSession {
         if (!(receiver instanceof RPCProxy))
             throw new Error(`Cannot RPC to local object of type '${receiver.constructor.name}'`);
 
+        let clientStackTrace: string;
+        if (this.addClientStackTraces) {
+            let stackTraceLimit: number;
+            if ('stackTraceLimit' in Error) {
+                stackTraceLimit = Error.stackTraceLimit;
+                Error.stackTraceLimit += 10;
+            }
+
+            try {
+                let stackTrace = new Error().stack.split(/\r?\n/).slice(1);
+                let index = stackTrace.findIndex(t => t.includes(' RPCSession.call '));
+                if (index >= 0) {
+                    stackTrace = stackTrace.slice(index + 1);
+                }
+
+                clientStackTrace = [ 
+                    `    <rpc-call>`,
+                    ...stackTrace 
+                ].join("\n");
+            } finally {
+                if ('stackTraceLimit' in Error) {
+                    Error.stackTraceLimit = stackTraceLimit;
+                }
+            }
+        }
+
         let ignoreLocks = this._ignoreLocksSync;
         if (!ignoreLocks && typeof Zone !== 'undefined') {
             ignoreLocks = Zone.current.get('conduit:skipRPCLocks');
@@ -190,7 +280,7 @@ export class RPCSession {
         if (!ignoreLocks)
             await this.waitChain;
         
-        this.log(`Call: [${receiver.constructor.name}/${receiver[OBJECT_ID]}].${method}()`);
+        this.debugLog(`Call: [${receiver.constructor.name}/${receiver[OBJECT_ID]}].${method}()`);
 
         let rpcRequest = <Request>{
             type: 'request',
@@ -201,22 +291,141 @@ export class RPCSession {
             metadata
         };
         
-        this.log(` - Before encoding:`);
-        this.logObject(rpcRequest);
+        this.debugLog(` - Before encoding:`);
+        this.debugLogObject(rpcRequest);
         return new Promise<ResponseT>((resolve, reject) => {
             this._requestMap.set(rpcRequest.id, {
                 // Save the *original* request that includes local references (not converted to remote references yet)
                 request: rpcRequest,
                 responseHandler: (response: Response) => {
-                    if (response.error)
-                        reject(response.error);
-                    else
-                        resolve(response.value);
+                    if (response.error) {
+                        let error = this.deserializeError(response.error);
+                        if (clientStackTrace)
+                            error.stack = `${error.stack}\n-- Client stack trace ---------------\n${clientStackTrace}`;
+
+                        reject(error);
+                        return;
+                    }
+                    resolve(response.value);
                 }
             });
 
             this.rawSend(rpcRequest);
         });
+    }
+
+    private errorTypes = new Map<string, (error: any) => any>();
+
+    private registerBuiltinErrors() {
+        this.registerErrorType(RPCInternalError);
+
+        this.registerBuiltinErrorType(Error);
+        this.registerBuiltinErrorType(EvalError);
+        this.registerBuiltinErrorType(RangeError);
+        this.registerBuiltinErrorType(ReferenceError);
+        this.registerBuiltinErrorType(SyntaxError);
+        this.registerBuiltinErrorType(TypeError);
+        this.registerBuiltinErrorType(URIError);
+
+        this.registerErrorType(AggregateError, (error: { message: string, errors: unknown }) => {
+            let errors: Error[] = [];
+            if (error.errors && Array.isArray(error.errors))
+                errors = error.errors.map(x => this.deserializeError(x));
+
+            return Object.assign(
+                new AggregateError(errors, error.message),
+                error,
+                { 
+                    [Symbol.for('nodejs.util.inspect.custom')]() { 
+                        // TODO: This isn't exactly what Node.js does. A default AggregateError shows `stack` and then
+                        // attaches the inspect breakdown on the end of that. I'm not exactly sure how it's done, it may
+                        // be an entirely custom inspect implementation. Technically we're losing the sub-error stack 
+                        // traces with this implementation.
+                        return this.stack; 
+                    } 
+                }
+            );
+        });
+    }
+
+    /**
+     * Registers a builtin error class. Usually this is not required, as Conduit registers all the standard builtin 
+     * types, but if your Javascript engine supports other nonstandard types, or if there are new types Conduit doesn't
+     * handle, you can use this to get them registered.
+     * 
+     * This is a convenience method that does the right thing (TM) compared to the options available on 
+     * registerErrorType(). In particular it ensures that the resulting error instances have the correct inspection 
+     * behavior in Node.js.
+     * 
+     * @param type 
+     */
+    public registerBuiltinErrorType<T extends Error>(type: Constructor<T>) {
+        this.registerErrorType(type, error => {
+            return Object.assign(new type(error.message), error, {
+                [Symbol.for('nodejs.util.inspect.custom')]() { return this.stack; }
+            })
+        });
+    }
+
+    /**
+     * Register an error type so that errors coming over the wire can be reified into the types you are expecting.
+     * Note that builtin errors (such as TypeError, ReferenceError etc) are already registered for you.
+     * @param type The class constructor. May optionally support a serialize() method for constructing instances
+     * @param factory A factory function for creating instances of this class. If unspecified, the static serialize() method
+     *                is used. If no serialize() method is available, the constructor itself is used, passing the message as 
+     *                the only parameter. After construction, the rest of the properties of the raw error object are assigned
+     *                to the resulting instance.
+     */
+    registerErrorType<T>(type: Constructor<T> & { deserialize?: (error: any) => T }, factory?: (error: any) => T) {
+        if ('deserialize' in type) {
+            factory ??= error => type.deserialize(error);
+        } else {
+            factory ??= error => Object.assign(new type(error.message), error);
+        }
+
+        this.errorTypes.set(type.name, factory);
+    }
+
+    /**
+     * Prepare an error for being thrown after being received over the wire.
+     * @param error 
+     * @returns 
+     */
+    protected deserializeError(error: { $constructorName: string; name: string; message: string; stack: string; }) {
+        if (!error.name)
+            return error;
+
+        let errorType = this.errorTypes.get(error.$constructorName) ?? this.errorTypes.get(error.name);
+        return errorType?.(error) ?? new RPCError(error);
+    }
+
+    /**
+     * Prepare an error for going over the wire. Doing this properly is complicated.
+     * @param error 
+     * @returns 
+     */
+    protected serializeError(error: any) {
+        if (!error.toJSON) {
+            if (error instanceof AggregateError) {
+                return { 
+                    name: error.name,
+                    message: error.message, 
+                    stack: error.stack, 
+                    errors: error.errors.map(e => this.serializeError(e)), 
+                    ...error 
+                };
+            } else if (error instanceof Error) {
+                return { 
+                    name: error.name, 
+                    message: error.message, 
+                    stack: error.stack, 
+                    $constructorName: error.constructor.name,
+                    ...error 
+                };
+            }
+        }
+
+        return error;
     }
 
     protected async performCall(request: Request): Promise<any> {
@@ -250,18 +459,30 @@ export class RPCSession {
         }
     }
 
-    private async onReceiveMessage(message: Message) {
+    private async onReceiveMessage(message: Message, rawData: string) {
         if (isRequest(message)) {
             if (!message.receiver) {
-                console.error(`Received invalid request: No receiver specified!`);
-                console.error(`Message was:`);
-                console.dir(message);
-                
-                this.rawSend(<Response>{
-                    type: 'response',
-                    id: message.id,
-                    error: { code: 'invalid-call', message: `No receiver specified` }
-                });
+                let rawMessage = JSON.parse(rawData);
+
+                if (rawMessage.receiver) {
+                    this.logger.log(`Received invalid request: No such receiver ${JSON.stringify(rawMessage.receive)}!`, { severity: 'error' });
+                    this.logger.log(`Message was: ${JSON.stringify(rawData, undefined, 2)}`, { severity: 'error' });
+
+                    this.rawSend(<Response>{
+                        type: 'response',
+                        id: message.id,
+                        error: { code: 'invalid-call', reason: 'no-such-receiver', message: `No such receiver ${JSON.stringify(rawMessage.receive)}` }
+                    });
+                } else {
+                    this.logger.log(`Received invalid request: No receiver specified!`, { severity: 'error' });
+                    this.logger.log(`Message was: ${JSON.stringify(rawData, undefined, 2)}`, { severity: 'error' });
+
+                    this.rawSend(<Response>{
+                        type: 'response',
+                        id: message.id,
+                        error: { code: 'invalid-call', reason: 'no-receiver-specified', message: `No receiver specified` }
+                    });
+                }
 
                 return;
             }
@@ -279,10 +500,16 @@ export class RPCSession {
                 try {
                     value = await this.performCall(message);
                 } catch (e) {
-                    if (e instanceof Error) {
-                        error = { message: e.message, stack: e.stack };
-                    } else {
-                        error = e;
+                    if (this.safeExceptionsMode) {
+                        if (!e[INTENTIONAL_ERROR]) {
+                            this.logger.log(`Error during ${message.receiver.constructor.name}#${message.method}(): ${e.stack ?? e}`, { severity: 'error' });
+                            e = new RPCInternalError();
+                        }
+                    }
+                    error = this.serializeError(e);
+
+                    if (this.maskStackTraces && e instanceof Error && error.stack) {
+                        error.stack = `${error.name}${error.message ? `: ${error.message}` : ``}`;
                     }
                 }
 
@@ -294,8 +521,8 @@ export class RPCSession {
 
                 return;
             } else {
-                this.log(`Failed to locate method '${message.method}' on receiver of type ${message.receiver.constructor.name} with ID ${message.receiver[OBJECT_ID]}`);
-                this.logObject(message.receiver);
+                this.debugLog(`Failed to locate method '${message.method}' on receiver of type ${message.receiver.constructor.name} with ID ${message.receiver[OBJECT_ID]}`);
+                this.debugLogObject(message.receiver);
                 this.rawSend(<Response>{
                     type: 'response',
                     id: message.id,
@@ -309,11 +536,11 @@ export class RPCSession {
         if (isResponse(message)) {
             let inFlightRequest = this._requestMap.get(message.id);
             if (!inFlightRequest) {
-                console.error(`Received response to unknown request '${message.id}'`);
+                this.logger.log(`Received response to unknown request '${message.id}'`, { severity: 'error' });
                 return;
             }
 
-            this.log(`Handling response for request ${message.id}...`);
+            this.debugLog(`Handling response for request ${message.id}...`);
             this._requestMap.delete(message.id);
             inFlightRequest.responseHandler(message);
             this.onRequestCompleted(inFlightRequest);
@@ -325,7 +552,7 @@ export class RPCSession {
             return;
         }
 
-        console.error(`Unknown message type from server '${message.type}'`);
+        this.logger.log(`Unknown message type from server '${message.type}'`, { severity: 'error' });
     }
 
     /**
@@ -400,7 +627,6 @@ export class RPCSession {
      * (once all references have been finalized).
      */
     private proxyFinalizer = new FinalizationRegistry((id: string) => {
-        console.log(`Finalizing proxy ${id}`);
         this.proxyRegistry.delete(id);
         setTimeout(() => {
             if (!this.proxyRegistry.has(id))
@@ -415,8 +641,8 @@ export class RPCSession {
      */
     countReferencesForObject(id: string) {
         let count = Array.from(this.remoteRefRegistry.keys()).filter(x => x.startsWith(`${id}.`)).length
-        this.log(`Counted ${count} references to ${id}. Reference list:`);
-        this.logObject(Array.from(this.remoteRefRegistry.keys()));
+        this.debugLog(`Counted ${count} references to ${id}. Reference list:`);
+        this.debugLogObject(Array.from(this.remoteRefRegistry.keys()));
         return count;
     }
 
@@ -450,7 +676,7 @@ export class RPCSession {
         id ??= object[OBJECT_ID] ?? uuid();
         object[OBJECT_ID] = id;
         this.localObjectRegistry.set(id, new WeakRef(object));
-        this.log(`Registered local object with ID ${id}`);
+        this.debugLog(`Registered local object with ID ${id}`);
     }
 
     /**
@@ -466,11 +692,11 @@ export class RPCSession {
      * @returns 
      */
     remoteRef(object: any): RemoteRef {
-        this.log(`Creating remote ref for object ${object[OBJECT_ID]}.`);
-        this.log(`Determining if this is local (type ${object.constructor.name}):`);
-        this.logObject(object);
+        this.debugLog(`Creating remote ref for object ${object[OBJECT_ID]}.`);
+        this.debugLog(`Determining if this is local (type ${object.constructor.name}):`);
+        this.debugLogObject(object);
         if (object instanceof RPCProxy) {
-            this.log(` - It is a proxy`);
+            this.debugLog(` - It is a proxy`);
             // The object is a remote proxy. 
             if (!this.proxyRegistry.has(object[OBJECT_ID])) {
                 this.registerProxy(object);
@@ -481,7 +707,7 @@ export class RPCSession {
 
             return { 'Rε': object[OBJECT_ID], 'S': 'R' }; // it is remote to US
         } else {
-            this.log(` - It is local`);
+            this.debugLog(` - It is local`);
             if (!this.localObjectRegistry.has(object[OBJECT_ID]))
                 this.registerLocalObject(object);
             
@@ -491,7 +717,7 @@ export class RPCSession {
             // the local object in scope.
 
             let referenceId = uuid();
-            this.log(`Creating reference ${object[OBJECT_ID]}.${referenceId}...`);
+            this.debugLog(`Creating reference ${object[OBJECT_ID]}.${referenceId}...`);
             this.remoteRefRegistry.set(`${object[OBJECT_ID]}.${referenceId}`, object);
             return { 'Rε': object[OBJECT_ID], 'S': 'L', Rid: referenceId }; // it is local to US
         }
@@ -510,46 +736,46 @@ export class RPCSession {
         let object: any;
 
         if (ref['S'] === 'L') {
-            this.log(`Resolving proxy ${JSON.stringify(ref)}`);
+            this.debugLog(`Resolving proxy ${JSON.stringify(ref)}`);
             // Local to the other side, AKA on this side it is remote (a proxy)
             let weakRef = this.proxyRegistry.get(ref['Rε']);
             object = weakRef?.deref();
 
             if (object) {
-                this.log(`Discarding extra proxy for '${ref['Rε']}'`);
+                this.debugLog(`Discarding extra proxy for '${ref['Rε']}'`);
                 this.remote.finalizeRef(`${ref['Rε']}.${ref.Rid}`);
             } else {
                 // This must be a new object from the remote.
-                this.log(`Creating new proxy for '${ref['Rε']}'`);
+                this.debugLog(`Creating new proxy for '${ref['Rε']}'`);
                 object = RPCProxy.create(this, ref['Rε'], ref.Rid);
                 this.proxyRegistry.set(ref['Rε'], new WeakRef(object));
             }
         } else if (ref['S'] === 'R') {
-            this.log(`Resolving local ${JSON.stringify(ref)}`);
+            this.debugLog(`Resolving local ${JSON.stringify(ref)}`);
             // Remote to the other side, AKA on this side it is local
             object = this.getLocalObjectById(ref['Rε']);
 
             if (object === undefined)
                 throw new Error(`No such object with ID '${ref['Rε']}'. Did you keep a reference to a dynamic object across a connection loss?`);
         } else {
-            console.dir(ref);
             throw new Error(`RemoteRef did not specify a side`);
         }
 
-        this.log(`Resolved referenced object to:`);
-        this.logObject(object);
+        this.debugLog(`Resolved referenced object to:`);
+        this.debugLogObject(object);
         return object;
     }
 
-    loggingEnabled = false;
-    private log(message: string) {
-        if (this.loggingEnabled)
-            console.log(`[${this.tag}] ${message}`);
+    debugLoggingEnabled = false;
+
+    private debugLog(message: string) {
+        if (this.debugLoggingEnabled)
+            this.logger.log(`[${this.tag}] ${message}`, { severity: 'debug' });
     }
 
-    private logObject(obj: any) {
-        if (this.loggingEnabled)
-            console.dir(obj);
+    private debugLogObject(obj: any) {
+        if (this.debugLoggingEnabled)
+            this.logger.log(JSON.stringify(obj, undefined, 2), { severity: 'debug' });
     }
 
     /**
@@ -588,7 +814,7 @@ export class RPCSession {
         if (typeof serviceName !== 'string')
             throw new Error(`Service name must be a string`);
 
-        this.log(`Registering service with ID ${serviceName}...`);
+        this.debugLog(`Registering service with ID ${serviceName}...`);
         
         if (this.serviceRegistry.has(serviceName)) {
             throw new Error(
@@ -599,7 +825,7 @@ export class RPCSession {
         }
 
         this.serviceRegistry.set(serviceName, factory);
-        this.log(`Registered service with ID ${serviceName}`);
+        this.debugLog(`Registered service with ID ${serviceName}`);
     }
 
     /**
@@ -611,19 +837,19 @@ export class RPCSession {
      */
     @Method()
     async getLocalService<T>(identity: string): Promise<T> {
-        this.log(`Finding local service named '${identity}'...`);
+        this.debugLog(`Finding local service named '${identity}'...`);
 
         if (!this.serviceRegistry.has(identity)) {
-            this.log(`No service registered with ID '${identity}'`);
+            this.debugLog(`No service registered with ID '${identity}'`);
             return null;
         }
      
         if (this.localObjectRegistry.has(identity)) {
-            this.log(`getLocalService(): Returning an existing service object for ${identity}...`);
+            this.debugLog(`getLocalService(): Returning an existing service object for ${identity}...`);
             return this.localObjectRegistry.get(identity).deref();
         }
         
-        this.log(`getLocalService(): Creating a new service object for ${identity}...`);
+        this.debugLog(`getLocalService(): Creating a new service object for ${identity}...`);
         let serviceObject = this.serviceRegistry.get(identity)(this);
         this.registerLocalObject(serviceObject, identity);
         return serviceObject;
@@ -651,14 +877,14 @@ export class RPCSession {
      * @returns 
      */
     isLocalObjectPresent(id: string) {
-        this.log(`isLocalObjectPresent(): Checking for ${id}...`);
+        this.debugLog(`isLocalObjectPresent(): Checking for ${id}...`);
         let weakRef = this.localObjectRegistry.get(id);
         if (weakRef)
-            this.log(`isLocalObjectPresent(): Weak ref is present`);
+            this.debugLog(`isLocalObjectPresent(): Weak ref is present`);
         else
-            this.log(`isLocalObjectPresent(): Weak ref is NOT present`);
+            this.debugLog(`isLocalObjectPresent(): Weak ref is NOT present`);
         
-        this.log(`isLocalObjectPresent(): Value is ${!!weakRef.deref() ? 'NOT present' : 'present'}`);
+        this.debugLog(`isLocalObjectPresent(): Value is ${!!weakRef.deref() ? 'NOT present' : 'present'}`);
         return !!weakRef.deref();
     }
     
@@ -669,10 +895,10 @@ export class RPCSession {
     @Method()
     async finalizeRef(refID: string) {
         if (!this.remoteRefRegistry.has(refID)) {
-            console.warn(`[webrpc.Session] Attempt to finalize reference '${refID}', but it is not known! This is a bug.`);
+            this.logger.log(`[conduit.Session] Attempt to finalize reference '${refID}', but it is not known! This is a bug.`, { severity: 'warning' });
         }
             
-        this.log(`Deleting reference '${refID}'`);
+        this.debugLog(`Deleting reference '${refID}'`);
         this.remoteRefRegistry.delete(refID);
         if (this.idle)
             this._becameIdle.next();
