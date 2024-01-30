@@ -323,7 +323,7 @@ describe('RPCSession', it => {
 
         let error2 = await serviceA.raise().catch(e => e);
 
-        expect(error2.stack).includes('-- Client stack trace');
+        expect(error2.stack).includes('-- Caller stack trace');
     });
 
     it('events work', async () => {
