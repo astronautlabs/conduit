@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { RPCChannel, SocketChannel } from './channel';
 import { DurableSocket } from './durable-socket';
 import { inlineRemotable } from './inline-remotable';
-import { AnyConstructor, Constructor, getRpcDiscoverable, getRpcIntrospectable, getRpcMethods, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
+import { AnyConstructor, Constructor, getRpcDescription, getRpcDiscoverable, getRpcEvents, getRpcIntrospectable, getRpcMethods, getRpcServiceName, getRpcType, OBJECT_ID, REFERENCE_ID } from './internal';
 import { Message } from './message';
 import { Method } from './method';
 import { Proxied, RemoteSubscription } from './proxied';
@@ -16,7 +16,7 @@ import { isResponse, Response } from './response';
 import { RPCProxy } from './rpc-proxy';
 import { Name } from './name';
 import { RPCConsoleLogger, RPCLogger } from './logger';
-import { INTENTIONAL_ERROR, RPCError, RPCInternalError } from './errors';
+import { INTENTIONAL_ERROR, RPCError, RPCInternalError, raise } from './errors';
 
 function isRemotable(obj: any): boolean {
     return obj && typeof obj === 'object' 
@@ -41,36 +41,51 @@ export type ServiceFactory<T = any> = (session: RPCSession) => T;
 
 interface RegisteredService<T = any> {
     factory: ServiceFactory<T>;
+    description: string;
     discoverable: boolean;
     introspectable: boolean;
-    methods: string[];
+    methods: IntrospectedMethod[];
+    events: IntrospectedEvent[];
+}
+
+export interface IntrospectedEvent {
+    name: string;
+    simpleType?: SimpleIntrospectedType;
+    description?: string;
+    //type?: IntrospectedType;
 }
 
 export interface DiscoveredService {
     name: string;
     discoverable: boolean;
     introspectable: boolean;
+    description: string;
 }
 
 export interface IntrospectedMethod {
     name: string;
     parameters?: IntrospectedParameter[];
     description?: string;
+    simpleReturnType?: SimpleIntrospectedType;
+    //returnType?: IntrospectedType;
 }
 
 // export interface IntrospectedType {
 //  // TODO
 // }
 
+export type SimpleIntrospectedType = 'string' | 'number' | 'bigint' | 'boolean' | 'object' | 'array' | 'void' | 'undefined' | 'null' | 'unknown';
+
 export interface IntrospectedParameter {
     name?: string;
-    simpleType?: 'string' | 'number' | 'boolean' | 'object' | 'undefined' | 'unknown';
+    simpleType?: SimpleIntrospectedType;
     //type?: IntrospectedType;
     description?: string;
 }
 
 export interface IntrospectedService extends DiscoveredService {
     methods: IntrospectedMethod[];
+    events: IntrospectedEvent[];
 }
 
 /**
@@ -637,31 +652,64 @@ export class RPCSession {
     
     private serviceRegistry = new Map<string, RegisteredService>();
 
-    @Method()
+    /**
+     * Discover the services available on the remote side.
+     * @returns 
+     */
     async discoverServices(): Promise<DiscoveredService[]> {
+        return await this.remote.getDiscoverableServices();
+    }
+
+    /**
+     * Get the list of services that are discoverable on the local side.
+     * @returns 
+     */
+    @Method()
+    async getDiscoverableServices(): Promise<DiscoveredService[]> {
         return Array.from(this.serviceRegistry.entries())
             .filter(([name, service]) => service.discoverable)
             .map(([name, service]) => ({ 
                 name,
+                description: service.description,
                 discoverable: service.discoverable,
                 introspectable: service.introspectable
             }))
         ;
     }
 
+    /**
+     * Introspect the given remote service, if possible.
+     * @param name The name of the service
+     * @returns 
+     */
+    async introspectService(klass: Function): Promise<IntrospectedService>;
+    async introspectService(name: string): Promise<IntrospectedService>;
+    async introspectService(service: Function | string): Promise<IntrospectedService> {
+        if (typeof service === 'function')
+            service = getRpcServiceName(service);
+
+        return await this.remote.getServiceIntrospection(service);
+    }
+
+    /**
+     * Return introspection information for the given local service. 
+     * @throws when the given service does not exist or is not introspectable.
+     * @param name The name of the service
+     * @returns 
+     */
     @Method()
-    async introspectService(name: string): Promise<IntrospectedService> {
+    async getServiceIntrospection(name: string): Promise<IntrospectedService> {
         let service = this.serviceRegistry.get(name);
         if (!service?.introspectable)
-            throw new Error(`Service does not exist or is not introspectable`);
+            raise(new Error(`Service does not exist or is not introspectable`));
 
         return {
             name,
+            description: service.description,
             discoverable: service.discoverable,
             introspectable: service.introspectable,
-            methods: service.methods.map(name => ({
-                name
-            }))
+            methods: service.methods,
+            events: service.events
         }
     }
 
@@ -891,9 +939,11 @@ export class RPCSession {
 
         this.serviceRegistry.set(serviceName, {
             factory,
+            description: getRpcDescription(klass),
             discoverable,
             introspectable,
-            methods: getRpcMethods(klass)
+            methods: getRpcMethods(klass),
+            events: getRpcEvents(klass)
         });
 
         this.debugLog(`Registered service with ID ${serviceName}`);

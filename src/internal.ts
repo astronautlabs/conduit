@@ -1,4 +1,6 @@
+import { getParameterNames } from "./get-param-names";
 import { Service } from "./service";
+import { IntrospectedEvent, IntrospectedMethod, SimpleIntrospectedType } from "./session";
 
 export const OBJECT_ID = Symbol('OBJECT_ID');
 export const REFERENCE_ID = Symbol('REFERENCE_ID');
@@ -68,11 +70,65 @@ export function getRpcDiscoverable(target: any): boolean {
     return Boolean(Reflect.getMetadata('rpc:discoverable', target) ?? true);
 }
 
-export function getRpcMethods(target: any): string[] {
+export function getRpcEvents(target: any): IntrospectedEvent[] {
     if (typeof Reflect === 'undefined')
         return undefined;
     
-    return Reflect.getMetadata('rpc:methods', target) ?? [];
+    let events: IntrospectedEvent[] = [];
+
+    for (let name of Reflect.getMetadata('rpc:events', target) ?? []) {
+        events.push({
+            name,
+            description: getRpcDescription(target.prototype, name)
+        })
+    }
+
+    return events;
+}
+
+export function getRpcDescription(target: any, propertyKey?: string) {
+    return Reflect.getMetadata('rpc:description', target, propertyKey);
+}
+
+export function getRpcMethods(target: any): IntrospectedMethod[] {
+    if (typeof Reflect === 'undefined')
+        return undefined;
+    
+    let methods: IntrospectedMethod[] = [];
+
+    for (let name of Reflect.getMetadata('rpc:methods', target) ?? []) {
+        let paramTypes = Reflect.getMetadata('design:paramtypes', target.prototype, name);
+        let paramNames = getParameterNames(target.prototype[name]);
+        let paramDescriptions = Reflect.getMetadata('rpc:paramDescriptions', target.prototype, name) ?? [];
+
+        methods.push({
+            name,
+            description: getRpcDescription(target.prototype, name),
+            simpleReturnType: simplifyType(Reflect.getMetadata('design:returntype', target.prototype, name)),
+            parameters: paramNames.map((name, i) => ({ 
+                name,
+                simpleType: simplifyType(paramTypes[i]),
+                description: paramDescriptions[i]
+            }))
+        })
+    }
+
+    return methods;
+}
+
+function simplifyType(type: Function): SimpleIntrospectedType {
+    switch (type) {
+        case undefined: return 'void';
+        case null: return 'null';
+        case Number: return 'number';
+        case String: return 'string';
+        case Boolean: return 'boolean';
+        case BigInt: return 'bigint';
+        case Array: return 'array';
+        case Object: return 'object';
+    }
+    
+    return 'unknown';
 }
 
 /**

@@ -11,6 +11,9 @@ import { Proxied } from "./proxied";
 import { TestChannel } from "./test-channel";
 import { RPCInternalError, raise } from "./errors";
 import { RPCLogOptions } from "./logger";
+import { Discoverable } from "./discoverable";
+import { Introspectable } from "./introspectable";
+import { Description } from "./description";
 
 describe('RPCSession', it => {
     function sessionPair(options: { safeExceptionsMode?: boolean, maskStackTraces?: boolean, addCallerStackTraces?: boolean } = {}) {
@@ -520,4 +523,140 @@ describe('RPCSession', it => {
 
         expect(await a2_2.works()).to.equal('good!');
     });
+
+    it('can discover remote registered services by default', async () => {
+        let [sessionA, sessionB] = sessionPair();
+
+        @Name('org.webrpc.test')
+        class Test extends Service {
+
+        }
+
+        sessionA.registerService(Test);
+
+        let services = await sessionB.discoverServices();
+
+        expect(services.length).to.equal(2);
+        expect(services[0]).to.include({ 
+            name: 'org.webrpc.session',
+            discoverable: true,
+            introspectable: true
+        });
+        expect(services[1]).to.include({
+            name: 'org.webrpc.test',
+            discoverable: true,
+            introspectable: true
+        })
+    });
+
+    it('cannot discover remote registered services if they are opted out', async () => {
+        let [sessionA, sessionB] = sessionPair();
+
+        @Name('org.webrpc.test')
+        @Discoverable(false)
+        class Test extends Service {
+
+        }
+
+        sessionA.registerService(Test);
+
+        let services = await sessionB.discoverServices();
+
+        expect(services.length).to.equal(1);
+        expect(services[0]).to.include({ 
+            name: 'org.webrpc.session',
+            discoverable: true,
+            introspectable: true
+        });
+    })
+
+    it('can introspect remote registered services by default', async () => {
+        let [sessionA, sessionB] = sessionPair();
+
+        @Name('org.webrpc.test')
+        class Test extends Service {
+            @Method()
+            foo(bar: number, baz: string) {
+                return `${baz}: ${bar + 1}`;
+            }
+        }
+
+        sessionA.registerService(Test);
+
+        let info = await sessionB.introspectService(Test);
+        
+        expect(info.name).to.equal('org.webrpc.test');
+        expect(info.discoverable).to.equal(true);
+        expect(info.introspectable).to.equal(true);
+        expect(info.methods.length).to.equal(1);
+        expect(info.methods[0].name).to.equal('foo');
+        expect(info.methods[0].parameters.length).to.equal(2);
+        expect(info.methods[0].parameters[0]).to.include({
+            name: 'bar',
+            simpleType: 'number'
+        });
+        expect(info.methods[0].parameters[1]).to.include({
+            name: 'baz',
+            simpleType: 'string'
+        });
+    })
+
+    it('cannot introspect remote registered services which opt out', async () => {
+        let [sessionA, sessionB] = sessionPair();
+
+        @Name('org.webrpc.test')
+        @Introspectable(false)
+        class Test extends Service {
+            @Method()
+            foo(bar: number, baz: string) {
+                return `${baz}: ${bar + 1}`;
+            }
+        }
+
+        sessionA.registerService(Test);
+
+        let exception = await sessionB.introspectService(Test).catch(e => e);
+        expect(exception).to.be.instanceOf(Error);
+    })
+
+    it('includes descriptions in introspected services', async () => {
+        let [sessionA, sessionB] = sessionPair();
+
+        @Name('org.webrpc.test')
+        @Description('class desc')
+        class Test extends Service {
+            @Method()
+            @Description('method desc')
+            foo(@Description('bar desc') bar: number, @Description('baz desc') baz: string) {
+                return `${baz}: ${bar + 1}`;
+            }
+        }
+
+        sessionA.registerService(Test);
+
+        let info = await sessionB.introspectService(Test);
+        
+        expect(info.description).to.equal('class desc');
+        expect(info.methods[0].description).to.equal('method desc');
+        expect(info.methods[0].parameters[0].description).to.equal('bar desc');
+        expect(info.methods[0].parameters[1].description).to.equal('baz desc');
+    })
+
+    it('include events in introspected services', async () => {
+        let [sessionA, sessionB] = sessionPair();
+
+        @Name('org.webrpc.test')
+        class Test extends Service {
+            @Event()
+            myEvent: any;
+        }
+
+        sessionA.registerService(Test);
+
+        let info = await sessionB.introspectService(Test);
+        
+        expect(info.methods.length).to.equal(0);
+        expect(info.events.length).to.equal(1);
+        expect(info.events[0].name).to.equal('myEvent');
+    })
 });
