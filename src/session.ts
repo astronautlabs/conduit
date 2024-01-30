@@ -86,7 +86,7 @@ export class RPCSession {
     /**
      * When true, the client stack trace is added to the end of deserialized errors before they are thrown. 
      */
-    addClientStackTraces = true;
+    addCallerStackTraces = true;
 
     /**
      * Cause the `fatalErrors` observable to emit the specified error.
@@ -247,7 +247,7 @@ export class RPCSession {
             throw new Error(`Cannot RPC to local object of type '${receiver.constructor.name}'`);
 
         let clientStackTrace: string;
-        if (this.addClientStackTraces) {
+        if (this.addCallerStackTraces) {
             let stackTraceLimit: number;
             if ('stackTraceLimit' in Error) {
                 stackTraceLimit = Error.stackTraceLimit;
@@ -301,7 +301,7 @@ export class RPCSession {
                     if (response.error) {
                         let error = this.deserializeError(response.error);
                         if (clientStackTrace)
-                            error.stack = `${error.stack}\n-- Client stack trace ---------------\n${clientStackTrace}`;
+                            error.stack = `${error.stack}\n-- Caller stack trace ---------------\n${clientStackTrace}`;
 
                         reject(error);
                         return;

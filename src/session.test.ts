@@ -13,7 +13,7 @@ import { RPCInternalError, raise } from "./errors";
 import { RPCLogOptions } from "./logger";
 
 describe('RPCSession', it => {
-    function sessionPair(options: { safeExceptionsMode?: boolean, maskStackTraces?: boolean, addClientStackTraces?: boolean } = {}) {
+    function sessionPair(options: { safeExceptionsMode?: boolean, maskStackTraces?: boolean, addCallerStackTraces?: boolean } = {}) {
         let [channelA, channelB] = TestChannel.makePair();
         let sessionA = new RPCSession(channelA);
         let sessionB = new RPCSession(channelB);
@@ -86,7 +86,7 @@ describe('RPCSession', it => {
     });
 
     it('Translates standard exceptions appropriately', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addCallerStackTraces: false });
         
         @Name('org.webrpc.A')
         class A extends Service {
@@ -110,7 +110,7 @@ describe('RPCSession', it => {
     });
 
     it('Preserves exception properties', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addCallerStackTraces: false });
         let error = new TypeError();
 
         @Name('org.webrpc.A')
@@ -130,7 +130,7 @@ describe('RPCSession', it => {
     });
 
     it('Preserves throwable properties', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addCallerStackTraces: false });
         let error = { foo: 123, bar: 321 };
 
         @Name('org.webrpc.A')
@@ -148,7 +148,7 @@ describe('RPCSession', it => {
     });
 
     it('Preserves custom error properties', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addCallerStackTraces: false });
 
         class CustomError extends Error {
             constructor(readonly foo: number, readonly bar: number) {
@@ -177,7 +177,7 @@ describe('RPCSession', it => {
     });
 
     it('Serializes registered custom errors properly, even without specifying `name`', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addCallerStackTraces: false });
 
         class CustomError extends Error {
             constructor(readonly foo: number, readonly bar: number) {
@@ -208,7 +208,7 @@ describe('RPCSession', it => {
     });
 
     it('can mask stack traces', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: true, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: true, addCallerStackTraces: false });
 
         class CustomError extends Error {
             constructor(readonly foo: number, readonly bar: number) {
@@ -233,7 +233,7 @@ describe('RPCSession', it => {
     });    
     
     it('#safeExceptionsMode allows intentional exceptions through', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: true, maskStackTraces: false, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: true, maskStackTraces: false, addCallerStackTraces: false });
 
         class CustomError extends Error {
             constructor(readonly foo: number, readonly bar: number) {
@@ -258,7 +258,7 @@ describe('RPCSession', it => {
     });
     
     it('#safeExceptionsMode intercepts unintentional exceptions', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: true, maskStackTraces: false, addClientStackTraces: false });
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: true, maskStackTraces: false, addCallerStackTraces: false });
 
         class CustomError extends Error {
             constructor(readonly foo: number, readonly bar: number) {
@@ -294,8 +294,8 @@ describe('RPCSession', it => {
         expect(error2.message).not.to.equal(error.message);
     });
     
-    it('#addClientStackTraces adds client stack tracing', async () => {
-        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addClientStackTraces: true });
+    it('#addCallerStackTraces adds client stack tracing', async () => {
+        let [sessionA, sessionB] = sessionPair({ safeExceptionsMode: false, maskStackTraces: false, addCallerStackTraces: true });
 
         class CustomError extends Error {
             constructor(readonly foo: number, readonly bar: number) {

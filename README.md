@@ -215,7 +215,7 @@ Even if an exception is intentionally returned via `raise()` (or when `safeExcep
 
 ## Client (caller) Stack Traces
 
-Since stack traces of errors which originate from RPC calls can contain server-side information, by default these stack traces are not useful when the fault of the exception is with the caller. To improve this situation, Conduit automatically captures the stack trace at the call-site of an RPC method and includes this in any error received by the remote side when rethrowing it on the local side. In some cases this may be a better error than you would get if the error were directly thrown from the RPC implementation.
+Since stack traces of errors which originate from RPC calls can contain information from the remote side, stack traces may not be useful if the caller is at fault. To improve this situation, Conduit automatically captures the stack trace at the call-site of an RPC method and includes this in any error received by the remote side when rethrowing it on the local side. In some cases this may be a better error than you would get if the error were directly thrown from the RPC implementation. If you wish to disable injection of client-side stack traces, you can do so by setting `RPCSession#addCallerStackTraces` to `false`.
 
 # Wire Format
 
@@ -344,4 +344,5 @@ instance without knowing anything about the object iself, the channel, etc.
 ```
 
 APIs like service discovery, introspection, and reference finalization are all implemented as Conduit RPC calls to the 
-remote side's `RPCSession` instance. For more about those APIs read on below.
+remote side's `RPCSession` instance.
+
