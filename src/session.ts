@@ -563,7 +563,14 @@ export class RPCSession {
                 } catch (e) {
                     if (this.safeExceptionsMode) {
                         if (!e[INTENTIONAL_ERROR]) {
-                            this.logger.log(`Error during ${message.receiver.constructor.name}#${message.method}(): ${e.stack ?? e}`, { severity: 'error' });
+                            let stringRep = e.stack;
+                            if (!stringRep) {
+                                stringRep = e.toString();
+                                if (stringRep === '[object Object]')
+                                    stringRep = JSON.stringify(stringRep);
+                            }
+
+                            this.logger.log(`Error during ${message.receiver.constructor.name}#${message.method}(): ${e.stack ?? stringRep}`, { severity: 'error' });
                             e = new RPCInternalError();
                         }
                     }
