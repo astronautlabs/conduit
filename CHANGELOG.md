@@ -1,3 +1,8 @@
+# 0.6.0 
+
+- Add support for `RPCSession#metadata`. You can now set values on the `metadata` object, and the data you place will 
+  be included in each RPC call. You can access metadata sent by the remote side using `session.remote.metadata`.
+
 # 0.5.0
 
 General

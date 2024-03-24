@@ -98,7 +98,7 @@ export interface IntrospectedService extends DiscoveredService {
 export class RPCSession {
     constructor(readonly channel: RPCChannel) {
         this.registerBuiltinErrors();
-        this._remote = RPCProxy.create<RPCSession>(this, getRpcServiceName(RPCSession), '');
+        this._remote = <Proxied<RPCSession> & { metadata: Record<string, any> }> RPCProxy.create<RPCSession>(this, getRpcServiceName(RPCSession), '');
         this.registerService(RPCSession, () => this);
         this.registerLocalObject(this, getRpcServiceName(RPCSession));
         channel.received.subscribe(data => {
@@ -252,7 +252,7 @@ export class RPCSession {
      * non-async-function properties, it still causes TS to recur. Since we don't need the remote, and the remote 
      * isn't available on the proxy anyway, we can work around the issue by omitting the recursion source.
      */
-    private _remote: Proxied<Omit<RPCSession, 'remote'>>;
+    private _remote: Proxied<Omit<RPCSession, 'remote'>> & { metadata: Record<string, any> };
 
     /**
      * Retrieve the remote RPCSession for performing direct calls to it over Conduit.
@@ -300,6 +300,12 @@ export class RPCSession {
     private _requestMap = new Map<string, InFlightRequest>();
 
     tag: string;
+
+    /**
+     * Metadata to share with the remote side. This information is sent along whenever a new request occurs. Access 
+     * metadata sent by the remote using `remote.metadata`
+     */
+    metadata: Record<string, any>;
 
     async call<ResponseT>(receiver: any, method: string, parameters: any[], metadata: Record<string,any> = {}): Promise<ResponseT> {
         if (!receiver)
@@ -349,7 +355,10 @@ export class RPCSession {
             receiver,
             method,
             parameters,
-            metadata
+            metadata: {
+                ...metadata,
+                'rpc:session:metadata': this.metadata
+            }
         };
         
         this.debugLog(` - Before encoding:`);
@@ -490,6 +499,10 @@ export class RPCSession {
     }
 
     protected async performCall(request: Request): Promise<any> {
+        if (request.metadata?.['rpc:session:metadata']) {
+            this._remote.metadata = request.metadata['rpc:session:metadata'];
+        }
+
         if (typeof Zone !== 'undefined') {
             return Zone.current.fork({
                 name: 'RPCSessionZone',
@@ -793,7 +806,7 @@ export class RPCSession {
     finalizationDelay = 1000;
 
     /**
-     * Register the given proxy in the proxy and finalizer registries. This is rquired to ensure 
+     * Register the given proxy in the proxy and finalizer registries. This is required to ensure 
      * we can identify the proxy by ID later, and that we are properly tracking when the finalization
      * of the given object occurs, so we can notify the remote side.
      * @param object 

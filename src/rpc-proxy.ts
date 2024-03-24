@@ -31,9 +31,19 @@ export class RPCProxy {
         const methodMap = new Map<string, Function>();
 
         let proxy: Proxied<T>;
-        
+        let metadata: Record<string, any>;
+
         proxy = <Proxied<T>>new Proxy(new RPCProxy(objectId, referenceId), {
-            get(_, p, __) {
+            set(t, p, v) {
+                if (p === 'metadata') {
+                    metadata = v;
+                    return true;
+                }
+
+                t[p] = v;
+                return true;
+            },
+            get(t, p, __) {
                 if (p === 'constructor')
                     return RPCProxy;
                 if (p === OBJECT_ID)
@@ -44,6 +54,8 @@ export class RPCProxy {
                     return () => session.remoteRef(proxy);
                 if (p === 'toString')
                     return () => `[RemoteObject ${objectId}]`;
+                if (p === 'metadata')
+                    return metadata;
                 if (p === 'then')
                     return undefined;
                 
