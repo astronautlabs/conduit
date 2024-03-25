@@ -305,7 +305,7 @@ export class RPCSession {
      * Metadata to share with the remote side. This information is sent along whenever a new request occurs. Access 
      * metadata sent by the remote using `remote.metadata`
      */
-    metadata: Record<string, any>;
+    metadata: Record<string, any> = {};
 
     async call<ResponseT>(receiver: any, method: string, parameters: any[], metadata: Record<string,any> = {}): Promise<ResponseT> {
         if (!receiver)
