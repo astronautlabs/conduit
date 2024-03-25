@@ -1,3 +1,8 @@
+# 0.6.1
+
+- Fixed a bug where DurableSocket would pass protocols as `[undefined]` to the underlying WebSocket implementation when no protocols were specified, which causes problems in some implementations.
+- The `RPCSession#metadata` field is now initialized as an empty object
+
 # 0.6.0 
 
 - Add support for `RPCSession#metadata`. You can now set values on the `metadata` object, and the data you place will 
