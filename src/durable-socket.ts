@@ -82,7 +82,7 @@ import { DurableSocketChannel } from "./channel";
         }
 
         let connected = false;
-        let socket = await this.createSocket(this.urlWithSessionId, Array.isArray(this.protocols) ? this.protocols : [ this.protocols ]);
+        let socket = await this.createSocket(this.urlWithSessionId, this.protocols ? (Array.isArray(this.protocols) ? this.protocols : [ this.protocols ]) : undefined);
 
         this._socket = socket;
         this._socket.onopen = ev => {
