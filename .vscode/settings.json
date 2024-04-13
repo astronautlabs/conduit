@@ -1,0 +1,6 @@
+{
+    // This is needed because we need to force GC to occur during GC-related tests.
+    // If you use some other way of running Jest tests you'll need to deal with this yourself.
+    // The NPM scripts for testing also do this.
+    "jest.jestCommandLine": "node --expose-gc node_modules/jest/bin/jest.js"
+}

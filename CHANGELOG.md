@@ -1,3 +1,8 @@
+# 0.7.0
+
+- The optional high-level `Service` abstraction now supports correct proxying of event subscriptions and will 
+  automatically re-subscribe any outstanding observers after reconnection.
+
 # 0.6.1
 
 - Fixed a bug where DurableSocket would pass protocols as `[undefined]` to the underlying WebSocket implementation when no protocols were specified, which causes problems in some implementations.

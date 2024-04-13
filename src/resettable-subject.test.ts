@@ -1,8 +1,8 @@
 import { expect } from "chai";
-import { delay, describe } from "razmin";
+import { describe, it } from "@jest/globals";
 import { ResettableReplaySubject } from "./resettable-subject";
 
-describe('ResettableReplaySubject', it => {
+describe('ResettableReplaySubject', () => {
     it('works', async () => {
         let subj = new ResettableReplaySubject<void>(1);
         let emitted = 0;

@@ -1,4 +1,4 @@
-import { delay, describe } from "razmin";
+import { describe, it, jest } from "@jest/globals";
 import { Method } from "./method";
 import { Remotable } from "./remotable";
 import { Name } from "./name";
@@ -14,8 +14,11 @@ import { RPCLogOptions } from "./logger";
 import { Discoverable } from "./discoverable";
 import { Introspectable } from "./introspectable";
 import { Description } from "./description";
+import { delay } from "./delay";
 
-describe('RPCSession', it => {
+jest.setTimeout(30000);
+
+describe('RPCSession', () => {
     function sessionPair(options: { safeExceptionsMode?: boolean, maskStackTraces?: boolean, addCallerStackTraces?: boolean } = {}) {
         let [channelA, channelB] = TestChannel.makePair();
         let sessionA = new RPCSession(channelA);

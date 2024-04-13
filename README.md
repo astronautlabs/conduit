@@ -1,12 +1,146 @@
 # ![@/conduit](./logo.svg)
 
-> 🚧 **Work In Progress**  
-> This library is in an alpha state. It is not yet ready for production use.
+> 🚧 **Beta Quality**  
+> This library is in an beta state. It is stable and has been tested in many real world scenarios. 
+> We do not yet recommend it for production use.
 
 [![NPM](https://img.shields.io/npm/v/@astronautlabs/conduit.svg)](https://www.npmjs.com/package/@astronautlabs/conduit) 
 [![Build Status](https://circleci.com/gh/astronautlabs/conduit/tree/main.svg?style=shield)](https://circleci.com/gh/astronautlabs/conduit)
 
 A powerful way to do RPC on the web.
+
+# Installation
+
+```bash
+npm install @astronautlabs/conduit
+```
+
+# Usage
+
+We'll use Conduit for simple client/server RPC on the web. Conduit is not constrained to this use case, but it is 
+the most common, and the path we recommend considering first.
+
+First, create your interface layer. This will be consumed by both your client and server code:
+
+```ts
+import * as conduit from '@astronautlabs/conduit';
+
+@conduit.Name('com.example.todo')
+@conduit.URL('wss://example.com')
+export class TodoService extends Service {
+  abstract changed: Observable<Todo[]>;
+  abstract add(todoInit: TodoInit): Promise<Todo>;
+  abstract remove(todo: Todo): Promise<void>;
+  abstract markDone(todo: Todo): Promise<Todo>;
+}
+
+export interface Todo {
+  id: number;
+  text: string;
+  createdAt: number;
+  done: boolean;
+}
+
+export type TodoInit = Omit<Todo, 'createdAt' | 'done' | 'id'>;
+
+```
+
+In your server:
+
+```ts
+import { BehaviorSubject } from 'rxjs';
+import * as conduit from '@astronautlabs/conduit';
+import * as Interface from '<my-service-interface>';
+
+class TodoService extends Interface.TodoService {
+  private todos: Interface.Todo[] = [];
+
+  @conduit.Event() changed = new BehaviorSubject<Interface.Todo[]>();
+
+  @conduit.Method()
+  override add(todoInit: Interface.TodoInit) {
+    let todo: Todo = {
+      ...todoInit,
+      id: this.todos.length,
+      createdAt: Date.now(),
+      done: false
+    };
+
+    this.todos.push(todo);
+    this.changed.next(this.todos);
+  }
+
+  @conduit.Method()
+  override remove(todo: Todo) {
+    this.todos = this.todos.filter(x => x.id !== todo.id);
+    this.changed.next(this.todos);
+  }
+
+  @conduit.Method() 
+  override markDone(todo: Todo): Promise<Todo> {
+    todo = this.todos.find(x => x.id === todo.id);
+    if (!todo)
+      conduit.raise(`No such Todo with ID ${todo.id}`);
+    todo.done = true;
+    this.changed.next(this.todos);
+  }
+}
+```
+
+In your client:
+
+```ts
+import { TodoService } from '<my-service-interface>';
+
+const todos = TodoService.proxy();
+
+todos.changed.subscribe(todos => {
+  console.log(`todos changed: `, todos);
+});
+
+todos.add({ text: 'Finish the TODO app' });
+```
+
+## How should I structure my project?
+
+There are many valid answers to the question of where your interface and server components should live within your 
+codebase. You can consider this section a light recommendation on how you might structure your project.
+
+Given a project which has a frontend, an interface, and a backend, you might arrange your project like this:
+
+```
+packages/
+  frontend/
+    package.json   # named "myproject-frontend", depends on "myproject"
+    main.ts        # imports "myproject", which is the interface layer
+    ...
+  backend/
+    package.json   # named "myproject", entrypoint ("main"/"module") is dist/interface/index.js
+                   # start script runs your server
+    .npmignore     # (only if you are going to actually publish to NPM) ignore "src/server", "dist/server" etc
+    src/
+      interface/   # contains interface definitions
+        index.ts
+        ...
+      server/
+        main.ts    # contains your server, import "../interface"
+```
+
+In the above we're assuming you are using `dist` as your Typescript output folder, obviously adjust as needed if you 
+use `build` or something else as your output folder.
+
+The above structure has a few nice benefits:
+- The interface lives with the backend, which implements it
+- The frontend, which is never a "library" for another piece of software, is called "PROJECT-frontend", whereas the 
+  backend, which *can* be a library for another piece of software (your frontend) is called "PROJECT" (without the 
+  "-backend" suffix). This also extends to microservices: If you had a `users` package, it would have the NPM name `PROJECT-users`, and other services which needed to talk to it would import it as such.
+- If needed, this structure is prepared for publishing your API interfaces to NPM (you would simply configure `.npmignore` to omit your server side implementation and any other irrelevant content).
+
+# Low Level API
+
+Conduit also provides a low-level API without asserting any opinions. Using this mode opens up many more use cases, but
+can be difficult to use correctly and error-prone. Please do not use this for standard client/server RPC, as the 
+Conduit Services abstraction shown above handles a great deal of this difficulty for you.
 
 ```ts
 import * as conduit from '@astronautlabs/conduit';

@@ -16,9 +16,9 @@ type ObservableType<T> =
              V :
              never : 
      T;
-type Methods<T> = { [P in keyof T as T[P] extends ((...args) => Promise<any>) ? P : never]: T[P] };
-type Events<T> = { [P in keyof T as T[P] extends Observable<any> ? P : never]: RemoteObservable<ObservableType<T[P]>> };
-export type Proxied<T> = Methods<T> & Events<T>;
+export type MethodsOf<T> = { [P in keyof T as T[P] extends ((...args) => Promise<any>) ? P : never]: T[P] };
+export type EventsOf<T> = { [P in keyof T as T[P] extends Observable<any> ? P : never]: RemoteObservable<ObservableType<T[P]>> };
+export type Proxied<T> = MethodsOf<T> & EventsOf<T>;
 
 export function markProxied<T>(value: T | Proxied<T>): Proxied<T> {
     return <Proxied<T>> <unknown> value;
