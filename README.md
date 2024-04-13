@@ -1,7 +1,7 @@
 # ![@/conduit](./logo.svg)
 
 > 🚧 **Beta Quality**  
-> This library is in an beta state. It is stable and has been tested in many real world scenarios. 
+> This library is in a beta state. It is stable and has been tested in many real world scenarios. 
 > We do not yet recommend it for production use.
 
 [![NPM](https://img.shields.io/npm/v/@astronautlabs/conduit.svg)](https://www.npmjs.com/package/@astronautlabs/conduit) 
