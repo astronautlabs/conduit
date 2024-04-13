@@ -1,3 +1,8 @@
+# 0.7.1
+
+- Fixes an issue where `Service` would initiate connection to backend before making the first method call or event subscribe.
+  This issue can cause a deadlock when using `session.lock()` early in the session's lifetime.
+
 # 0.7.0
 
 - The optional high-level `Service` abstraction now supports correct proxying of event subscriptions and will 

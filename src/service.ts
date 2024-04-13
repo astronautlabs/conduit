@@ -75,6 +75,12 @@ export function createServiceProxy<T extends object>(sessionPromise: Promise<RPC
         return session;
     });
 
+    /**
+     * Acquire the service. It's important that this only be called when a method call or subscribe action has been 
+     * initiated. If this occurs before that moment, then it is possible to produce a deadlock if the caller uses 
+     * session.lock() before we are able to start our own getRemoteService() call.
+     * @returns 
+     */
     let serviceProvider = async () => {
         let service = await (servicePromise ??= acquireService());
         if (!service)
@@ -90,8 +96,7 @@ export function createServiceProxy<T extends object>(sessionPromise: Promise<RPC
             if (methodTable.has(p))
                 return methodTable.get(p);
 
-            let servicePromise = serviceProvider();
-            let method = async (...args) => (await servicePromise)[p](...args);
+            let method = async (...args) => (await serviceProvider())[p](...args);
             method['subscribe'] = async (observer, ...args): Promise<RemoteSubscription> => {
                 if (!eventObservers.has(p))
                     eventObservers.set(p, []);
@@ -99,7 +104,7 @@ export function createServiceProxy<T extends object>(sessionPromise: Promise<RPC
                 let observerList = eventObservers.get(p);
                 let eventSub: EventSubscription = { 
                     observer, 
-                    remoteSubscription: (await servicePromise)[p].subscribe(...args) 
+                    remoteSubscription: (await serviceProvider())[p].subscribe(...args) 
                 };
 
                 observerList.push(eventSub);
