@@ -329,7 +329,7 @@ export class RPCSession {
                 }
 
                 clientStackTrace = [ 
-                    `    <rpc-call>`,
+                    `    <rpc-call [${receiver[OBJECT_ID]}].${method}(${parameters.map(x => JSON.stringify(x)).join(', ')})>`,
                     ...stackTrace 
                 ].join("\n");
             } finally {

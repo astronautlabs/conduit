@@ -1,3 +1,8 @@
+# 0.7.2
+
+- The caller stack trace now shows which RPC call caused the error instead of just `<rpc-call>`. For instance, you might 
+  see `<rpc-call [com.example.todos].add({ "text": "..." })>`.
+
 # 0.7.1
 
 - Fixes an issue where `Service` would initiate connection to backend before making the first method call or event subscribe.
