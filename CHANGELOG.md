@@ -2,6 +2,7 @@
 
 - Adds `channelOf()` and `sessionOf()` to `Service` to allow skipping the tedious chain 
   of function calls to go from a service instance to a session or channel instance.
+- Fixes a crash when using `Service.proxy()` with a channel not derived from `DurableSocketChannel`
 
 # 0.7.2
 

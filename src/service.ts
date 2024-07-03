@@ -1,4 +1,4 @@
-import { firstValueFrom } from "rxjs";
+import { firstValueFrom, of } from "rxjs";
 import { DurableSocketChannel, RPCChannel } from "./channel";
 import { DurableSocket } from "./durable-socket";
 import { AnyConstructor, getRpcServiceName, getRpcUrl } from "./internal";
@@ -242,7 +242,7 @@ export class Service {
 
         if (typeof channelOrEndpoint === 'string') {
             let endpointChannel = Service.channelForEndpoint(channelOrEndpoint);
-            channelPromise = endpointChannel.socket.waitUntilReady().then(() => endpointChannel);
+            channelPromise = firstValueFrom(endpointChannel.ready ?? of()).then(() => endpointChannel);
         } else {
             channelPromise = Promise.resolve(channelOrEndpoint);
         }
