@@ -1,3 +1,8 @@
+# 0.7.3
+
+- Adds `channelOf()` and `sessionOf()` to `Service` to allow skipping the tedious chain 
+  of function calls to go from a service instance to a session or channel instance.
+
 # 0.7.2
 
 - The caller stack trace now shows which RPC call caused the error instead of just `<rpc-call>`. For instance, you might 
