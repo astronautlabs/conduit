@@ -256,6 +256,14 @@ export class Service {
         return proxy;
     }
 
+    static sessionOf(service): RPCSession {
+        return this.sessionForChannel(this.channelOf(service));
+    }
+
+    static channelOf(service): RPCChannel {
+        return this.channelForEndpoint(this.endpointOf(service));
+    }
+
     static endpointOf(service): string {
         return Reflect.getMetadata('rpc:endpoint', service);
     }
@@ -295,7 +303,7 @@ export class Service {
      * @param channel 
      * @returns 
      */
-    static channelForEndpoint(endpoint: string) {
+    static channelForEndpoint(endpoint: string): RPCChannel {
         let channel = this.endpointChannels.get(endpoint)?.deref();
         if (channel) {
             return channel;
