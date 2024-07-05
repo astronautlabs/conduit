@@ -22,8 +22,6 @@ const SERVICE_PROXY_SESSION = Symbol('SERVICE_PROXY_SESSION');
  * 
  * Automatically handles state loss by reacquiring the remote service once connection is ready again, and replaying
  * any active subscription calls.
- * 
- * @internal
  */
 export function createServiceProxy<T extends object>(sessionPromise: Promise<RPCSession>, klass: AnyConstructor<T>): Proxied<T> {
     let servicePromise: Promise<Proxied<T>> | undefined;

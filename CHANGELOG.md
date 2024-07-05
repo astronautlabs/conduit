@@ -1,3 +1,8 @@
+# 0.7.4
+
+- Exposes `createServiceProxy()` as an external API, allowing immediate remote proxies to be used in cases where 
+  subclassing from `Service` is not desirable.
+
 # 0.7.3
 
 - Adds `channelOf()` and `sessionOf()` to `Service` to allow skipping the tedious chain 
