@@ -54,7 +54,7 @@ export function createServiceProxy<T extends object>(sessionPromise: Promise<RPC
 
         let ready = true;
 
-        session.channel.stateLost.subscribe(() => {
+        session.channel.stateLost?.subscribe(() => {
             // Protect against channel types that emit multiple stateLost events before a ready event.
             // If this were to occur without this check, we could resubscribe to events multiple times.
             if (!ready)
