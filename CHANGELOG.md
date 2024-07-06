@@ -1,6 +1,11 @@
+# 0.7.6
+
+- Fix: Crash when using `createServiceProxy()` with a channel that does not implement `ready`
+
 # 0.7.5
 
 - Fix: Crash when using `createServiceProxy()` with a channel that does not implement `stateLost`.
+
 # 0.7.4
 
 - Exposes `createServiceProxy()` as an external API, allowing immediate remote proxies to be used in cases where 

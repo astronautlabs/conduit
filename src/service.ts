@@ -63,13 +63,16 @@ export function createServiceProxy<T extends object>(sessionPromise: Promise<RPC
             // Set ourselves up for the next time the connection is ready, including reacquiring the service 
             // as soon as possible (so that we can resubscribe to events).
             ready = false;
-            sessionReady = firstValueFrom(session.channel.ready).then(() => session);
+            sessionReady = (session.channel.ready ? firstValueFrom(session.channel.ready) : Promise.resolve(session)).then(() => session);
             servicePromise = sessionReady.then(() => acquireService());
         });
 
-        session.channel.ready.subscribe(() => ready = true);
+        if (session.channel.ready)
+            session.channel.ready.subscribe(() => ready = true);
+        else
+            ready = true;
 
-        await firstValueFrom(session.channel.ready);
+        await session.channel.ready ? firstValueFrom(session.channel.ready) : Promise.resolve();
         return session;
     });
 
