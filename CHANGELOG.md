@@ -1,3 +1,8 @@
+# vNext
+
+- `createServiceProxy()` now accepts a target object which allows some portion of the proxy to be local, including 
+  adding additional non-remoted properties. This will be used for future Conduit features.
+
 # 0.7.6
 
 - Fix: Crash when using `createServiceProxy()` with a channel that does not implement `ready`
