@@ -1,5 +1,7 @@
 # vNext
 
+# 0.8.0
+
 - Introduces the `@WebWorker()` decorator, which provides an ergonomic way to communicate with Web Workers using Conduit.
 - `createServiceProxy()` now accepts a target object which allows some portion of the proxy to be local, including 
   adding additional non-remoted properties. This will be used for future Conduit features.
