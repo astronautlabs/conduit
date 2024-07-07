@@ -264,7 +264,7 @@ export class RPCSession {
      * @param serviceIdentity A class which is annotated with `@conduit.Name()`
      * @throws when the remote cannot provide the given service
      */
-    async getRemoteService<T>(serviceIdentity: AnyConstructor<T>): Promise<Proxied<T>>
+    async getRemoteService<T>(serviceClass: AnyConstructor<T>): Promise<Proxied<T>>
     /**
      * Retrieve a proxy for a remote service according to the given service identity
      * @param serviceIdentity The name of the service to retrieve.
@@ -990,14 +990,25 @@ export class RPCSession {
     }
 
     /**
-     * Obtain an instance of the given service, by it's identity.  If the service has already been constructed, the 
+     * Obtain an instance of the given service by it's identity.  If the service has already been constructed, the 
      * existing instance is used. Otherwise, the factory associated with the service registration will be called,
      * the new instance will be registered, and then returned.
-     * 
-     * @internal
      */
+    async getLocalService<T>(identity: string): Promise<T>;
+    
+    /**
+     * Obtain an instance of the given service by it's constructor.  If the service has already been constructed, the 
+     * existing instance is used. Otherwise, the factory associated with the service registration will be called,
+     * the new instance will be registered, and then returned.
+     */
+    async getLocalService<T>(serviceClass: AnyConstructor<T>): Promise<T>;
+
     @Method()
-    async getLocalService<T>(identity: string): Promise<T> {
+    async getLocalService<T>(serviceIdentityOrClass: string | AnyConstructor<T>): Promise<T> {
+        const identity = typeof serviceIdentityOrClass === 'function' 
+            ? getRpcServiceName(serviceIdentityOrClass) 
+            : serviceIdentityOrClass;
+
         this.debugLog(`Finding local service named '${identity}'...`);
 
         if (!this.serviceRegistry.has(identity)) {

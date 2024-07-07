@@ -3,6 +3,8 @@
 - Introduces the `@WebWorker()` decorator, which provides an ergonomic way to communicate with Web Workers using Conduit.
 - `createServiceProxy()` now accepts a target object which allows some portion of the proxy to be local, including 
   adding additional non-remoted properties. This will be used for future Conduit features.
+- `RPCSession.getLocalService()` can now accept a class constructor just like `RPCSession.getRemoteService()` can.
+  This improves API consistency and removes the need to do a manual service name lookup before acquiring a local service.
 
 # 0.7.6
 
