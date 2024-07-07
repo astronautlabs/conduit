@@ -332,6 +332,55 @@ This can be used to modify any part of the base APIs, or even add new top-level 
 well-known references within an application, since the default implementation of `RPCSession` does not provide any 
 mechanism for using well-known references (other than the `RPCSession` well known reference).
 
+# Web Workers
+
+> 🚧 _Experimental:_ The API for this feature may change in future minor/patch revisions.
+
+Communicating with Web Workers requires message passing as they live in their own execution context separate from the 
+primary browser window. Conduit provides an ergonomic way to create and communicate with Web Workers. To get started,
+create a class decorated with `@WebWorker()`.
+
+> `my-web-worker.ts`
+```typescript
+import * as conduit from '@astronautlabs/conduit';
+
+@conduit.WebWorker(() => new Worker(new URL('./my-web-worker', import.meta.url)))
+class MyWebWorker {
+  async doSomeWork(a: number, b: number) {
+    return a + b;
+  }
+}
+```
+
+> `my-web-app.ts`
+```typescript
+import * as conduit from '@astronautlabs/conduit';
+import { MyWebWorker } from './my-web-worker';
+
+const worker = conduit.WebWorker.start(MyWebWorker);
+const result = await worker.doSomeWork(1, 2);
+console.log(result); // prints "3"
+```
+
+The above is compatible with [Webpack's Web Workers support](https://webpack.js.org/guides/web-workers/#syntax). Other bundlers and dev servers such as Vite also support this convention.
+
+If you are shipping ESM directly without bundling, or if your environment directly supports web workers, you may be able to use a simpler syntax:
+
+> `my-web-worker.ts`
+```typescript
+
+import * as conduit from '@astronautlabs/conduit';
+
+@conduit.WebWorker(import.meta.url) // CAUTION: Not supported in most environments
+class MyWebWorker {
+  async doSomeWork(a: number, b: number) {
+    return a + b;
+  }
+}
+```
+
+Starting the worker is done in the same way if you use this variant.
+
 # Logging
 
 The `RPCSession` class logs certain information which may be important to the operation of your application. By default 

@@ -139,3 +139,38 @@ export class WindowChannel implements RPCChannel {
         window.removeEventListener('message', this.handler);
     }
 }
+
+/**
+ * @unstable Caution: This API may change in minor or patch releases until it is marked as stable.
+ */
+interface PostMessageTarget {
+    addEventListener(event: 'message', callback: (ev: MessageEvent) => void);
+    removeEventListener(event: 'message', callback: (ev: MessageEvent) => void);
+    postMessage(data: string);
+}
+
+/**
+ * A channel that operates via window-to-window (or frame-to-frame) postMessage.
+ * @unstable Caution: This API may change in minor or patch releases until it is marked as stable.
+ */
+export class PostMessageChannel implements RPCChannel {
+    constructor(private remote: PostMessageTarget, readonly requiredOrigin?: string) {
+        remote.addEventListener('message', this.handler);
+    }
+
+    private handler = (ev: MessageEvent) => {
+        if (this.requiredOrigin && ev.origin !== this.requiredOrigin)
+            return;
+        this._received.next(ev.data)
+    };
+    private _received = new Subject<string>();
+    get received() { return this._received.asObservable(); }
+
+    send(message: any) {
+        this.remote.postMessage(message);
+    }
+
+    close() {
+        this.remote.removeEventListener('message', this.handler);
+    }
+}
